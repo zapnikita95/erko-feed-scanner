@@ -21,14 +21,21 @@
       <div class="progress-track"><div id="cache-refresh-bar" class="progress-bar"></div></div>
       <div id="cache-refresh-status" class="progress-status"></div>
     </div>
-    <p class="sub header-sub">Ниже — <strong>два разных режима поиска</strong>. Кэш обновляется только кнопкой «Обновить кэш» в шапке.</p>
+    <p class="sub header-sub">Два режима — на <strong>вкладках</strong> ниже. Кэш только кнопкой «Обновить кэш».</p>
   </header>
 
-  <!-- ========== РАЗДЕЛ 1: ВСЯ СЕТЬ ========== -->
-  <section class="card search-mode-all" id="section-all-brands" aria-labelledby="title-all-brands">
-    <span class="mode-badge mode-all">Раздел 1 · вся сеть</span>
-    <h2 class="section-title" id="title-all-brands">Поиск по всем брендам</h2>
-    <p class="hint section-hint">Сканируются фиды <strong>всех</strong> партнёров сразу. Выбор site_id здесь не нужен — бренд не выбирается.</p>
+  <div class="main-tabs-bar" role="tablist" aria-label="Режим поиска">
+    <button type="button" role="tab" class="main-tab active" id="main-tab-all" data-main-tab="all" aria-selected="true" aria-controls="panel-all-brands">
+      По всей сети
+    </button>
+    <button type="button" role="tab" class="main-tab" id="main-tab-brand" data-main-tab="brand" aria-selected="false" aria-controls="panel-one-brand">
+      По одному бренду
+    </button>
+  </div>
+
+  <section class="card main-tab-panel" id="panel-all-brands" data-main-panel="all" role="tabpanel" aria-labelledby="main-tab-all">
+    <h2 class="section-title">Поиск по всем брендам</h2>
+    <p class="hint section-hint">Сканируются фиды <strong>всех</strong> партнёров. Выбор site_id не нужен.</p>
     <div class="row">
       <label class="grow">
         <span class="label">Запрос (URL, ID оффера или slug)</span>
@@ -41,11 +48,9 @@
     <div id="network-results" class="network-results results-block"></div>
   </section>
 
-  <!-- ========== РАЗДЕЛ 2: ОДИН БРЕНД ========== -->
-  <section class="card search-mode-brand" id="section-one-brand" aria-labelledby="title-one-brand">
-    <span class="mode-badge mode-brand">Раздел 2 · один бренд</span>
-    <h2 class="section-title" id="title-one-brand">Поиск по одному бренду</h2>
-    <p class="hint section-hint">Сначала выберите партнёра — поиск и фильтры фидов относятся <strong>только к нему</strong>.</p>
+  <section class="card main-tab-panel hidden" id="panel-one-brand" data-main-panel="brand" role="tabpanel" aria-labelledby="main-tab-brand">
+    <h2 class="section-title">Поиск по одному бренду</h2>
+    <p class="hint section-hint">Выберите партнёра — поиск и фильтры только для него.</p>
 
     <div class="row client-row brand-client-row">
       <label>
@@ -97,9 +102,9 @@
 
     <div class="feed-filters-block">
       <p class="filters-heading">Ограничить, в каких фидах бренда искать</p>
-      <div class="row tabs">
-        <button class="tab active" data-tab="cities">По городам / регионам</button>
-        <button class="tab" data-tab="feeds">Фильтр по фидам</button>
+      <div class="row feed-tabs">
+        <button type="button" class="feed-tab active" data-tab="cities">По городам / регионам</button>
+        <button type="button" class="feed-tab" data-tab="feeds">Фильтр по фидам</button>
       </div>
 
       <div class="tab-content" data-tab="cities">

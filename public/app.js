@@ -1,7 +1,9 @@
 const LS_SITE = 'erko-feed-scanner-siteId';
+const LS_MAIN_TAB = 'erko-feed-scanner-main-tab';
 
 const state = {
   siteId: '6390',
+  mainTab: 'all',
   clients: [],
   feeds: [],
   cities: [],
@@ -77,6 +79,33 @@ async function initClients() {
     $('#city-store-search').value = '';
     $('#feed-filter').value = '';
     loadFeeds();
+  });
+}
+
+function switchMainTab(tab) {
+  const next = tab === 'brand' ? 'brand' : 'all';
+  state.mainTab = next;
+  localStorage.setItem(LS_MAIN_TAB, next);
+  $$('.main-tab').forEach((t) => {
+    const on = t.dataset.mainTab === next;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $$('.main-tab-panel').forEach((p) => {
+    p.classList.toggle('hidden', p.dataset.mainPanel !== next);
+  });
+  if (next === 'all') {
+    loadNetworkSummary();
+  } else {
+    loadFeeds().catch((e) => setStatus('error', String(e.message || e)));
+  }
+}
+
+function initMainTabs() {
+  const preferred = localStorage.getItem(LS_MAIN_TAB);
+  switchMainTab(preferred === 'brand' ? 'brand' : 'all');
+  $$('.main-tab').forEach((t) => {
+    t.addEventListener('click', () => switchMainTab(t.dataset.mainTab));
   });
 }
 
@@ -484,7 +513,6 @@ async function runSearch() {
       `Просканировано ${data.feedsScanned} фидов за ${data.elapsedMs} мс (сеть+кэш), клиент: ${ms} мс. Совпадений: ${data.hitsCount}.${note}`,
     );
     renderResults(data);
-    $('#brand-results-block')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     setStatus('error', String(e.message || e));
   }
@@ -556,18 +584,28 @@ async function runNetworkSearch() {
     const res = await apiFetch('/api/search-all', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, concurrency: 6 }),
       signal: longFetchSignal(3_600_000),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+    if (!res.ok) {
+      const msg =
+        res.status === 502
+          ? 'Сервер не успел обработать запрос (502). Попробуйте ID оффера или поиск по одному бренду.'
+          : data.error || res.statusText || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
     const ms = Math.round(performance.now() - started);
     setNetworkStatus(
       '',
       `Брендов: ${data.brandsScanned}, фидов: ${data.feedsScanned}, совпадений: ${data.hitsCount}, ${data.elapsedMs} мс (сервер), ${ms} мс (клиент).`,
     );
     renderNetworkResults(data);
-    $('#section-all-brands')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     setNetworkStatus('error', String(e.message || e));
   }
@@ -886,9 +924,9 @@ $('#clear-selection').addEventListener('click', () => {
   state.selectedFeedIds.clear();
   renderFeedList();
 });
-$$('.tab').forEach((t) =>
+$$('.feed-tab').forEach((t) =>
   t.addEventListener('click', () => {
-    $$('.tab').forEach((x) => x.classList.remove('active'));
+    $$('.feed-tab').forEach((x) => x.classList.remove('active'));
     t.classList.add('active');
     state.activeTab = t.dataset.tab;
     $$('.tab-content').forEach((c) => c.classList.toggle('hidden', c.dataset.tab !== state.activeTab));
@@ -917,6 +955,7 @@ async function logout() {
 
 async function boot() {
   await ensureAuth();
+  initMainTabs();
   await initClients();
   const statusRes = await fetch('/api/cache/refresh/status', { credentials: 'include' });
   if (statusRes.ok) {
@@ -933,8 +972,11 @@ async function boot() {
       setTimeout(hideCacheRefreshProgress, 6000);
     }
   }
-  await loadFeeds();
-  await loadNetworkSummary();
+  if (state.mainTab === 'all') {
+    await loadNetworkSummary();
+  } else {
+    await loadFeeds();
+  }
 }
 boot().catch((e) => {
   if (String(e.message || e) === 'auth_required') return;

@@ -41,14 +41,18 @@ function mapSearchResult(r) {
 async function loadAllNetworkFeeds() {
   const brands = [];
   for (const c of listClients()) {
-    const client = getClient(c.siteId);
-    const meta = await loadFeedsMeta(client);
-    const feeds = enrichFeeds(meta, client).map(f => ({
-      ...f,
-      siteId: client.siteId,
-      clientName: client.name,
-    }));
-    brands.push({ siteId: client.siteId, name: client.name, feeds });
+    try {
+      const client = getClient(c.siteId);
+      const meta = await loadFeedsMeta(client);
+      const feeds = enrichFeeds(meta, client).map(f => ({
+        ...f,
+        siteId: client.siteId,
+        clientName: client.name,
+      }));
+      brands.push({ siteId: client.siteId, name: client.name, feeds });
+    } catch (e) {
+      console.warn(`[search-all] skip site ${c.siteId}:`, e.message || e);
+    }
   }
   return brands;
 }
@@ -281,9 +285,29 @@ function matchOffer(offer, q) {
   return false;
 }
 
-async function searchInFeed(siteId, feed, q) {
+function xmlProbablyMisses(xml, q) {
+  if (q.kind === 'id') {
+    const v = q.value;
+    return !xml.includes(`id="${v}"`) && !xml.includes(`id='${v}'`);
+  }
+  if (q.kind === 'slug' || q.kind === 'substring') {
+    return !xml.toLowerCase().includes(q.value);
+  }
+  return false;
+}
+
+async function searchInFeed(siteId, feed, q, { light = false } = {}) {
   try {
-    const offers = await getOffers(siteId, feed);
+    let offers;
+    if (light) {
+      const xml = await getCachedFeedXml(siteId, feed.url);
+      if (xmlProbablyMisses(xml, q)) {
+        return { feed, matches: [], total: 0 };
+      }
+      offers = parseOffers(xml);
+    } else {
+      offers = await getOffers(siteId, feed);
+    }
     const matches = offers.filter(o => matchOffer(o, q));
     return { feed, matches, total: offers.length };
   } catch (err) {
@@ -346,17 +370,18 @@ function startNetworkCacheRefresh({ force = true, concurrency = 8, source = 'man
   return { started: true, skipped: false, quota: gate.quota, ...status };
 }
 
-async function runSearch(siteId, feeds, q, { concurrency = 16 } = {}) {
+async function runSearch(siteId, feeds, q, { concurrency = 16, light = false } = {}) {
   const results = new Array(feeds.length);
   let idx = 0;
+  const workersN = Math.min(Math.max(1, concurrency), 16, feeds.length || 1);
   async function worker() {
     while (true) {
       const i = idx++;
       if (i >= feeds.length) return;
-      results[i] = await searchInFeed(siteId, feeds[i], q);
+      results[i] = await searchInFeed(siteId, feeds[i], q, { light });
     }
   }
-  const workers = Array.from({ length: Math.min(concurrency, feeds.length) }, worker);
+  const workers = Array.from({ length: workersN }, worker);
   await Promise.all(workers);
   return results;
 }
@@ -636,22 +661,27 @@ app.get('/api/network-summary', async (_req, res) => {
 
 app.post('/api/search-all', async (req, res) => {
   try {
-    const { query, concurrency = 12 } = req.body || {};
+    const { query, concurrency = 6 } = req.body || {};
     const q = normalizeQuery(query);
     if (q.kind === 'empty') return res.status(400).json({ error: 'Empty query' });
 
     const started = Date.now();
     const brandBlocks = await loadAllNetworkFeeds();
+    if (!brandBlocks.length) {
+      return res.status(503).json({ error: 'Нет доступных брендов для поиска.' });
+    }
+
     const brandsOut = [];
     let feedsScanned = 0;
     let hitsCount = 0;
+    const workers = Math.min(Math.max(1, Number(concurrency) || 6), 8);
 
     for (const block of brandBlocks) {
-      let results = await runSearch(block.siteId, block.feeds, q, { concurrency });
+      let results = await runSearch(block.siteId, block.feeds, q, { concurrency: workers, light: true });
       if (!results.some(r => r.matches.length) && q.kind !== 'id') {
         const globalFeed = block.feeds.find(f => f.kind === 'global');
         if (globalFeed) {
-          const globalResult = await searchInFeed(block.siteId, globalFeed, q);
+          const globalResult = await searchInFeed(block.siteId, globalFeed, q, { light: true });
           if (globalResult.matches.length) results = [...results, globalResult];
         }
       }
@@ -678,6 +708,7 @@ app.post('/api/search-all', async (req, res) => {
       brands: brandsOut,
     });
   } catch (e) {
+    console.error('[search-all]', e);
     res.status(500).json({ error: String(e.message || e) });
   }
 });
