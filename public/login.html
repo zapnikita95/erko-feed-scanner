@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <title>Вход — Эрко Фарм Feed Scanner</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f5f6f8; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 2rem; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,.06); }
+    h1 { font-size: 1.2rem; margin: 0 0 0.25rem; }
+    .sub { color: #666; font-size: 13px; margin: 0 0 1.25rem; line-height: 1.45; }
+    label { display: block; font-size: 12px; color: #777; margin-top: 0.75rem; }
+    input { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 4px; font-size: 14px; }
+    button { margin-top: 1.25rem; width: 100%; padding: 10px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; font-size: 14px; }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .err { background: #fef2f2; color: #b91c1c; padding: 10px 12px; border-radius: 8px; margin-top: 12px; font-size: 13px; display: none; }
+  </style>
+  <script src="/totp_modal.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Эрко Фарм</h1>
+    <p class="sub">Feed Scanner — вход через Dashboard. После «Войти» введите код из приложения-аутентификатора.</p>
+    <div id="err" class="err"></div>
+    <form id="loginForm">
+      <label>Логин (email)</label>
+      <input type="text" id="username" autocomplete="username" required />
+      <label>Пароль</label>
+      <input type="password" id="password" autocomplete="current-password" required />
+      <button type="submit" id="btn">Войти</button>
+    </form>
+  </div>
+  <script>
+    const errEl = document.getElementById('err');
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn');
+      btn.disabled = true;
+      errEl.style.display = 'none';
+      try {
+        const totp = await promptDashboardTotp('Вход в Эрко Фарм Feed Scanner. Код из приложения.');
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+            totp,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        window.location.href = '/';
+      } catch (x) {
+        if (String(x.message || x).includes('cancelled')) return;
+        errEl.textContent = String(x.message || x);
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

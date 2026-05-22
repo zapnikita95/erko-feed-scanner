@@ -1,0 +1,18 @@
+{
+  "name": "erko-feed-scanner",
+  "version": "2.0.0",
+  "description": "Эрко Фарм — поиск товара по YML-фидам аптек (озерки, Столетов, Самсон Фарма)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "warm": "node warm-cache.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "clients": [
+    {
+      "siteId": "6390",
+      "name": "Супераптека (озерки)",
+      "feedsListUrl": "https://superapteka.ru/export/ecom/ozerki/anyquery/feeds_list.json"
+    },
+    {
+      "siteId": "5335",
+      "name": "Столетов",
+      "feedsListUrl": "https://superapteka.ru/export/ecom/stoletov/anyquery/feeds_list.json"
+    },
+    {
+      "siteId": "292",
+      "name": "Самсон Фарма",
+      "feedsListUrl": "https://superapteka.ru/export/ecom/samson/anyquery/feeds_list.json"
+    }
+  ]
+}

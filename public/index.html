@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Эрко Фарм — Feed Scanner</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="app">
+  <header class="app-header">
+    <div class="row header-top">
+      <h1>Эрко Фарм — Feed Scanner</h1>
+      <button type="button" id="logout" class="ghost">Выйти</button>
+    </div>
+    <div class="row client-row">
+      <label>
+        <span class="label">Партнёр (site_id)</span>
+        <select id="client-site"></select>
+      </label>
+      <button id="toggle-add-partner" class="ghost add-partner-btn" type="button" title="Добавить партнёра">+</button>
+    </div>
+    <div id="add-partner-panel" class="add-partner-panel hidden">
+      <div class="row">
+        <label>
+          <span class="label">Имя партнёра</span>
+          <input id="partner-name" type="text" placeholder="например, Супераптека (столетов)" autocomplete="off" />
+        </label>
+        <label>
+          <span class="label">siteID</span>
+          <input id="partner-site-id" type="text" inputmode="numeric" placeholder="например, 1234" autocomplete="off" />
+        </label>
+        <label class="grow">
+          <span class="label">Мастер-фид</span>
+          <input id="partner-feed-url" type="text" placeholder="https://superapteka.ru/export/ecom/stoletov/anyquery/feeds_list.json" autocomplete="off" />
+        </label>
+        <button id="add-partner-submit" class="primary" type="button">Добавить</button>
+        <button id="add-partner-cancel" class="ghost" type="button">Отмена</button>
+      </div>
+      <div id="add-partner-progress" class="partner-progress hidden" aria-live="polite">
+        <div class="progress-track"><div id="add-partner-bar" class="progress-bar"></div></div>
+        <div id="add-partner-status" class="progress-status"></div>
+      </div>
+    </div>
+    <div class="sub" id="client-description">
+      Проверяем, в каких фидах есть товар. Источник списка:
+      <code id="feeds-list-url">—</code>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <label class="grow">
+        <span class="label">Поиск товара</span>
+        <input id="query" type="text" placeholder="URL, ID оффера или часть слага в URL" />
+      </label>
+      <button id="run" class="primary">Искать</button>
+    </div>
+    <div class="hint">
+      В YML-фидах у офферов часто нет «названия» — только <code>id</code>, <code>url</code>, <code>price</code>.
+      Поиск по URL / slug (последний сегмент пути) или по <code>&lt;offer id="..."&gt;</code>.
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row tabs">
+      <button class="tab active" data-tab="cities">По городам / регионам</button>
+      <button class="tab" data-tab="feeds">Фильтр по фидам</button>
+    </div>
+
+    <div class="tab-content" data-tab="cities">
+      <div class="row">
+        <label class="grow">
+          <span class="label">Город (или подпись региона для аптек)</span>
+          <select id="city"><option value="">— любой —</option></select>
+        </label>
+        <label>
+          <span class="label">Типы фидов</span>
+          <span class="kind-toggle">
+            <label><input type="checkbox" class="kind" value="city" checked /> регион / городской</label>
+            <label><input type="checkbox" class="kind" value="store" checked /> точки</label>
+            <label><input type="checkbox" class="kind" value="global" checked /> global</label>
+          </span>
+        </label>
+        <button id="warm" class="ghost" title="Предзагрузить в кэш">Прогреть кэш</button>
+      </div>
+      <label class="warm-all-row">
+        <input type="checkbox" id="warm-all" />
+        <span class="warm-all-text">Прогреть <strong>все</strong> фиды партнёра (<span id="warm-all-count">—</span> шт.) — только скачивание XML в кэш, без парсинга; может занять много времени</span>
+      </label>
+      <div class="city-store-block">
+        <div class="row">
+          <label class="grow">
+            <span class="label">Конкретная точка — поиск по названию фида или по ID (<code>externalId</code>)</span>
+            <input id="city-store-search" type="text" placeholder="Адрес, название или ID фида" autocomplete="off" disabled />
+          </label>
+          <button type="button" id="clear-city-stores" class="ghost" disabled>Снять выбор</button>
+        </div>
+        <p id="city-store-hint" class="hint"></p>
+        <div id="city-store-list" class="feed-list city-store-list"></div>
+        <div id="city-selection-summary" class="summary city-selection-summary"></div>
+      </div>
+      <div id="city-summary" class="summary"></div>
+    </div>
+
+    <div class="tab-content hidden" data-tab="feeds">
+      <div class="row">
+        <label class="grow">
+          <span class="label">Фильтр по названию / ID фида</span>
+          <input id="feed-filter" type="text" placeholder="Москва, region_14, 1371…" />
+        </label>
+        <label>
+          <span class="label">Выбрано</span>
+          <span id="selected-count" class="badge">0</span>
+        </label>
+        <button id="select-visible" class="ghost">Выбрать все видимые</button>
+        <button id="clear-selection" class="ghost">Снять выделение</button>
+      </div>
+      <div id="feed-list" class="feed-list"></div>
+    </div>
+  </section>
+
+  <section class="card" id="results-card">
+    <div class="row"><h2 id="results-title">Результаты</h2><div id="status" class="status"></div></div>
+    <div id="results"></div>
+  </section>
+
+  <footer class="app-footer">
+    <span id="cache-info"></span>
+  </footer>
+</div>
+<script src="/app.js" type="module"></script>
+</body>
+</html>
