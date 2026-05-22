@@ -43,6 +43,16 @@
       </label>
       <button id="network-run" class="primary">Искать по всей сети</button>
     </div>
+    <div class="row network-tools">
+      <label class="grow">
+        <span class="label">Фильтр фидов — <code>externalId</code> или слова в названии</span>
+        <input id="network-feed-filter" type="text" placeholder="region_14, global, Москва Сумская, 1371…" autocomplete="off" />
+      </label>
+      <button type="button" id="network-feed-filter-clear" class="ghost">Сбросить фильтр</button>
+    </div>
+    <p id="network-feed-filter-hint" class="hint network-filter-hint">
+      Перед поиском сужает, в каких фидах сканировать. После поиска — мгновенно фильтрует таблицу результатов.
+    </p>
     <p id="network-summary" class="summary"></p>
     <div id="network-search-progress" class="partner-progress hidden" aria-live="polite">
       <div class="progress-track"><div id="network-search-bar" class="progress-bar"></div></div>

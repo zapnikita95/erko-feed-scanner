@@ -218,11 +218,12 @@ button.ghost { background: transparent; }
 table.hit-results {
   table-layout: fixed;
 }
-table.hit-results col.col-feed { width: 28%; }
-table.hit-results col.col-type { width: 7%; }
-table.hit-results col.col-id { width: 10%; }
-table.hit-results col.col-price { width: 12%; }
-table.hit-results col.col-stock { width: 8%; }
+table.hit-results col.col-feed { width: 24%; }
+table.hit-results col.col-feed-id { width: 9%; }
+table.hit-results col.col-type { width: 6%; }
+table.hit-results col.col-id { width: 9%; }
+table.hit-results col.col-price { width: 10%; }
+table.hit-results col.col-stock { width: 7%; }
 table.hit-results col.col-url { width: 35%; }
 #results th, #results td,
 .network-results th, .network-results td {
@@ -257,6 +258,14 @@ table.hit-results .url {
 .network-results .feed-url:hover { text-decoration: underline; }
 #results .feed-link { margin-top: 4px; font-size: 12px; }
 .network-results .feed-link { margin-top: 4px; font-size: 12px; }
+.feed-id-cell {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: #1e40af;
+  word-break: break-all;
+}
+.network-tools { margin-top: 12px; align-items: flex-end; }
+.network-filter-hint { margin-top: 4px; margin-bottom: 0; }
 #results .feed-cell .ext,
 .network-results .feed-cell .ext { display: block; margin-top: 2px; }
 #results .nohit,

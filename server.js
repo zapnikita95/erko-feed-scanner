@@ -126,6 +126,24 @@ function enrichFeeds(meta, client) {
   });
 }
 
+/** externalId или слова в title (все слова должны встретиться). */
+function filterFeedsByQuery(feeds, feedFilter) {
+  const raw = String(feedFilter || '').trim();
+  if (!raw) return feeds;
+  const q = raw.toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  return feeds.filter((f) => {
+    const id = String(f.externalId || '').toLowerCase();
+    const title = String(f.title || '').toLowerCase();
+    if (id === q || id.includes(q)) return true;
+    if (title.includes(q)) return true;
+    if (words.length > 1) {
+      return words.every((w) => title.includes(w) || id.includes(w));
+    }
+    return false;
+  });
+}
+
 async function loadFeedsMeta(client, { force = false } = {}) {
   const dir = cacheDirForSite(client.siteId);
   const metaFile = path.join(dir, client.metaCacheName);
@@ -580,12 +598,18 @@ app.post('/api/search', async (req, res) => {
   try {
     const client = getClient(parseSiteId(req));
     const siteId = client.siteId;
-    const { query, feedIds, city, kinds } = req.body || {};
+    const { query, feedIds, city, kinds, feedFilter } = req.body || {};
     const q = normalizeQuery(query);
     if (q.kind === 'empty') return res.status(400).json({ error: 'Empty query' });
 
     const meta = await loadFeedsMeta(client);
     let feeds = enrichFeeds(meta, client);
+    if (feedFilter) {
+      feeds = filterFeedsByQuery(feeds, feedFilter);
+      if (!feeds.length) {
+        return res.status(400).json({ error: `Нет фидов по фильтру «${feedFilter}».` });
+      }
+    }
     if (Array.isArray(feedIds) && feedIds.length) {
       const set = new Set(feedIds);
       feeds = feeds.filter(f => set.has(f.externalId));

@@ -13,6 +13,7 @@ const state = {
   lastResults: null,
   feedsListUrl: '',
   clientName: '',
+  networkBrandsRaw: [],
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -566,6 +567,63 @@ function hideNetworkSearchProgress(delayMs = 4000) {
   }, delayMs);
 }
 
+function getNetworkFeedFilter() {
+  return ($('#network-feed-filter')?.value || '').trim();
+}
+
+function feedMatchesFilter(r, raw) {
+  const q = String(raw || '').trim().toLowerCase();
+  if (!q) return true;
+  const words = q.split(/\s+/).filter(Boolean);
+  const id = String(r.externalId || '').toLowerCase();
+  const title = String(r.title || '').toLowerCase();
+  if (id === q || id.includes(q)) return true;
+  if (title.includes(q)) return true;
+  if (words.length > 1) {
+    return words.every((w) => title.includes(w) || id.includes(w));
+  }
+  return false;
+}
+
+function filterBrandBlock(brand, filterQ) {
+  if (!filterQ) return brand;
+  const results = brand.results.filter((r) => feedMatchesFilter(r, filterQ));
+  return { ...brand, results, hitsCount: results.length };
+}
+
+function updateNetworkFilterHint() {
+  const hint = $('#network-feed-filter-hint');
+  if (!hint) return;
+  const q = getNetworkFeedFilter();
+  const raw = state.networkBrandsRaw || [];
+  if (!q) {
+    hint.textContent =
+      'Перед поиском сужает, в каких фидах сканировать. После поиска — мгновенно фильтрует таблицу результатов.';
+    return;
+  }
+  if (!raw.length) {
+    hint.textContent = `Фильтр «${q}»: будет применён при поиске (externalId или слова в названии фида).`;
+    return;
+  }
+  const visible = raw
+    .map((b) => filterBrandBlock(b, q))
+    .filter((b) => b.hitsCount > 0);
+  const rows = visible.reduce((n, b) => n + b.hitsCount, 0);
+  hint.textContent = `Фильтр «${q}»: показано ${rows} строк в ${visible.length} брендах (из ${raw.length} с результатами).`;
+}
+
+function applyNetworkResultFilter() {
+  const q = getNetworkFeedFilter();
+  const raw = state.networkBrandsRaw || [];
+  if (!raw.length) {
+    updateNetworkFilterHint();
+    return;
+  }
+  const visible = raw.map((b) => filterBrandBlock(b, q)).filter((b) => b.hitsCount > 0);
+  renderNetworkResultsList(visible);
+  updateNetworkFilterHint();
+}
+
 function sortFeedResultRows(a, b) {
   if (a.kind !== b.kind) {
     const rank = { global: 0, city: 1, store: 2 };
@@ -694,6 +752,7 @@ async function runNetworkSearch() {
   if (runBtn) runBtn.disabled = true;
 
   $('#network-results').innerHTML = '';
+  state.networkBrandsRaw = [];
   setNetworkStatus('loading', 'Сканируем бренды по очереди…');
   setNetworkSearchProgress(2, 'Загружаем список брендов…');
 
@@ -701,6 +760,7 @@ async function runNetworkSearch() {
   let feedsScanned = 0;
   let hitsCount = 0;
   const brandsOut = [];
+  const feedFilter = getNetworkFeedFilter();
 
   try {
     if (!state.clients.length) await refreshClients();
@@ -717,11 +777,24 @@ async function runNetworkSearch() {
       const res = await apiFetch('/api/search', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ query, siteId: c.siteId }),
+        body: JSON.stringify({
+          query,
+          siteId: c.siteId,
+          ...(feedFilter ? { feedFilter } : {}),
+        }),
         signal,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText || `HTTP ${res.status}`);
+      if (!res.ok) {
+        if (res.status === 400 && feedFilter) {
+          setNetworkSearchProgress(
+            Math.round(((i + 1) / total) * 100),
+            `${i + 1}/${total}: ${c.name} — нет фидов по фильтру «${feedFilter}»`,
+          );
+          continue;
+        }
+        throw new Error(data.error || res.statusText || `HTTP ${res.status}`);
+      }
 
       feedsScanned += data.feedsScanned || 0;
       const hits = (data.results || []).filter((r) => r.matches?.length);
@@ -735,7 +808,8 @@ async function runNetworkSearch() {
           results: hits,
         };
         brandsOut.push(brandBlock);
-        appendBrandNetworkResult(brandBlock);
+        state.networkBrandsRaw = [...brandsOut];
+        applyNetworkResultFilter();
       }
 
       setNetworkSearchProgress(
@@ -745,9 +819,12 @@ async function runNetworkSearch() {
     }
 
     const ms = Math.round(performance.now() - started);
+    state.networkBrandsRaw = brandsOut;
+    applyNetworkResultFilter();
     if (!brandsOut.length) {
       renderNetworkResultsList([]);
     }
+    updateNetworkFilterHint();
     setNetworkSearchProgress(100, `Готово: ${total} брендов, ${hitsCount} совпадений`, 'success');
     setNetworkStatus(
       '',
@@ -981,6 +1058,7 @@ function buildHitTable(rows) {
   table.className = 'hit-results';
   table.innerHTML = `<colgroup>
     <col class="col-feed">
+    <col class="col-feed-id">
     <col class="col-type">
     <col class="col-id">
     <col class="col-price">
@@ -988,7 +1066,7 @@ function buildHitTable(rows) {
     <col class="col-url">
   </colgroup>
   <thead><tr>
-    <th>Фид</th><th>Тип</th><th>ID оффера</th><th>Цена</th><th>В наличии</th><th>URL товара</th>
+    <th>Фид</th><th>externalId</th><th>Тип</th><th>ID оффера</th><th>Цена</th><th>В наличии</th><th>URL товара</th>
   </tr></thead>`;
   const tbody = document.createElement('tbody');
   for (const r of rows) {
@@ -999,11 +1077,14 @@ function buildHitTable(rows) {
     for (const m of r.matches) {
       const tr = document.createElement('tr');
       tr.className = 'hit';
+      tr.dataset.feedId = r.externalId || '';
+      tr.dataset.feedTitle = r.title || '';
       const productUrl = m.url
         ? `<a class="url" href="${escapeAttr(m.url)}" title="${escapeAttr(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a>`
         : '<span class="nohit">—</span>';
       tr.innerHTML = `
-        <td class="feed-cell">${escapeHtml(r.title)} <span class="ext">${escapeHtml(r.externalId)}</span>${feedLink ? `<div class="feed-link">${feedLink}</div>` : ''}</td>
+        <td class="feed-cell">${escapeHtml(r.title)}${feedLink ? `<div class="feed-link">${feedLink}</div>` : ''}</td>
+        <td class="feed-id-cell">${escapeHtml(r.externalId)}</td>
         <td><span class="tag ${r.kind}">${r.kind}</span></td>
         <td>${escapeHtml(m.id)}</td>
         <td class="price">${escapeHtml(m.price)}${m.oldprice ? `<span class="oldprice">${escapeHtml(m.oldprice)}</span>` : ''}</td>
@@ -1044,6 +1125,12 @@ function longFetchSignal(ms) {
 $('#network-run')?.addEventListener('click', runNetworkSearch);
 $('#network-query')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') runNetworkSearch();
+});
+$('#network-feed-filter')?.addEventListener('input', applyNetworkResultFilter);
+$('#network-feed-filter-clear')?.addEventListener('click', () => {
+  const el = $('#network-feed-filter');
+  if (el) el.value = '';
+  applyNetworkResultFilter();
 });
 $('#run').addEventListener('click', runSearch);
 $('#query').addEventListener('keydown', (e) => {
