@@ -608,6 +608,29 @@ function formatCacheRefreshStatus(data) {
   return `Кэш обновлён: ${warmed}/${total} XML${failed ? `, ошибок: ${failed}` : ''}.`;
 }
 
+function formatRefreshQuotaHint(quota) {
+  if (!quota) return '';
+  const left = quota.remaining ?? 0;
+  const limit = quota.limit ?? 3;
+  const used = quota.count ?? 0;
+  if (left <= 0) {
+    return `Обновлений сегодня: ${used}/${limit} — лимит исчерпан, завтра снова.`;
+  }
+  return `Обновлений сегодня: ${used}/${limit}, осталось ${left}.`;
+}
+
+function updateRefreshCacheButton(quota, running) {
+  const btn = $('#refresh-cache');
+  if (!btn) return;
+  btn.disabled = Boolean(running) || (quota && !quota.manualAllowed);
+  const hint = quota ? formatRefreshQuotaHint(quota) : '';
+  btn.title = quota && !quota.manualAllowed
+    ? hint
+    : hint
+      ? `${hint} Скачать актуальные мастер-фиды и XML по всем брендам.`
+      : 'Скачать актуальные мастер-фиды и XML по всем брендам';
+}
+
 async function pollCacheRefreshStatus() {
   try {
     const res = await apiFetch('/api/cache/refresh/status');
@@ -620,10 +643,14 @@ async function pollCacheRefreshStatus() {
         ? 8
         : 100;
     const text = formatCacheRefreshStatus(data);
-    setCacheRefreshProgress(pct, text, data.error ? 'error' : data.running ? '' : 'success');
+    const quotaHint = formatRefreshQuotaHint(data.quota);
+    setCacheRefreshProgress(
+      pct,
+      quotaHint && !data.running ? `${text} ${quotaHint}` : text,
+      data.error ? 'error' : data.running ? '' : 'success',
+    );
 
-    const btn = $('#refresh-cache');
-    if (btn) btn.disabled = Boolean(data.running);
+    updateRefreshCacheButton(data.quota, data.running);
 
     if (!data.running) {
       stopCacheRefreshPoll();
@@ -637,8 +664,7 @@ async function pollCacheRefreshStatus() {
   } catch (e) {
     stopCacheRefreshPoll();
     setCacheRefreshProgress(0, String(e.message || e), 'error');
-    const btn = $('#refresh-cache');
-    if (btn) btn.disabled = false;
+    updateRefreshCacheButton(null, false);
     throw e;
   }
 }
@@ -653,7 +679,7 @@ function startCacheRefreshPoll() {
 
 async function requestCacheRefresh() {
   const btn = $('#refresh-cache');
-  if (btn) btn.disabled = true;
+  if (btn?.disabled) return;
   setCacheRefreshProgress(4, 'Запускаем обновление кэша (сначала Озерки)…');
   try {
     const res = await apiFetch('/api/cache/refresh', {
@@ -662,6 +688,11 @@ async function requestCacheRefresh() {
       body: JSON.stringify({ force: true }),
     });
     const data = await res.json();
+    if (res.status === 429) {
+      updateRefreshCacheButton(data.quota, false);
+      setCacheRefreshProgress(100, data.error || data.message || 'Лимит обновлений на сегодня.', 'error');
+      return;
+    }
     if (res.status === 409) {
       startCacheRefreshPoll();
       return;
@@ -669,7 +700,7 @@ async function requestCacheRefresh() {
     if (!res.ok) throw new Error(data.error || res.statusText);
     startCacheRefreshPoll();
   } catch (e) {
-    if (btn) btn.disabled = false;
+    updateRefreshCacheButton(null, false);
     setCacheRefreshProgress(0, String(e.message || e), 'error');
   }
 }
@@ -985,7 +1016,17 @@ async function boot() {
   const statusRes = await fetch('/api/cache/refresh/status', { credentials: 'include' });
   if (statusRes.ok) {
     const st = await statusRes.json();
-    if (st.running) startCacheRefreshPoll();
+    updateRefreshCacheButton(st.quota, st.running);
+    if (st.running) {
+      startCacheRefreshPoll();
+    } else if (st.quota && !st.quota.loginAutoAllowed && st.quota.count > 0) {
+      setCacheRefreshProgress(
+        100,
+        `Кэш уже актуален на сегодня (${st.quota.count}/${st.quota.limit}). ${formatRefreshQuotaHint(st.quota)}`,
+        'success',
+      );
+      setTimeout(hideCacheRefreshProgress, 6000);
+    }
   }
   await loadFeeds();
   await loadNetworkSummary();

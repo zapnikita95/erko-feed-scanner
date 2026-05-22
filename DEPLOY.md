@@ -29,7 +29,13 @@ git push -u origin main
 | Путь | Содержимое |
 |------|------------|
 | `/data/clients.local.json` | Список партнёров (озерки, Столетов, Самсон + новые через +) |
-| `/data/cache/<siteId>/` | Скачанные XML-фиды (прогрев не нужен повторять после перезапуска) |
+| `/data/cache/<siteId>/` | Скачанные XML-фиды |
+| `/data/sessions/` | Сессии входа — **переживают редеплой** (нужен Volume + стабильный `SESSION_SECRET`) |
+| `/data/cache_refresh_daily.json` | Счётчик полных обновлений кэша за сутки (лимит 3) |
+
+**Сессии:** задай `SESSION_SECRET` в Variables Railway и **не меняй** его без нужды — иначе все куки станут недействительны. Cookie живёт 7 суток (`SESSION_MAX_AGE_MS`).
+
+**Обновление кэша:** при входе — один раз в сутки (если сегодня уже было — пропуск). Кнопка «Обновить кэш» — до 3 полных прогонов в сутки (`CACHE_REFRESH_DAILY_LIMIT`). Часовой пояс суток: `Europe/Moscow`.
 
 Проверка после деплоя: `GET /api/health` → в JSON поле `storage.dataDir` должно быть `/data`, `storage.volumeWritable: true`. После прогрева `storage.cacheFiles` растёт.
 

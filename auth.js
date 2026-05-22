@@ -1,13 +1,23 @@
 import session from 'express-session';
+import { createRequire } from 'module';
 import { dashboardLogin, cleanTotp } from './lib/dashboard_auth.js';
+import { SESSIONS_DIR, ensureDataDirs } from './config.js';
+
+const require = createRequire(import.meta.url);
+const FileStore = require('session-file-store')(session);
 
 const SESSION_SECRET =
   process.env.SESSION_SECRET || 'dev-only-change-me-on-railway-min-32-chars';
+
+/** 7 суток — сессия переживает редеплой, если SESSION_SECRET стабилен и Volume на /data. */
+const SESSION_MAX_AGE_MS = Number(process.env.SESSION_MAX_AGE_MS) || 1000 * 60 * 60 * 24 * 7;
 
 const ALLOWED_SUFFIXES = (process.env.ALLOWED_EMAIL_SUFFIXES || '@diginetica.com,@anyquery.ru,@tbank.ru')
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
+
+let sessionHandler = null;
 
 export function emailAllowed(username) {
   const u = String(username || '').trim().toLowerCase();
@@ -16,18 +26,28 @@ export function emailAllowed(username) {
 }
 
 export function sessionMiddleware() {
-  return session({
+  if (sessionHandler) return sessionHandler;
+  ensureDataDirs();
+  sessionHandler = session({
     name: 'erko_feed_scanner_sid',
     secret: SESSION_SECRET,
+    store: new FileStore({
+      path: SESSIONS_DIR,
+      ttl: Math.ceil(SESSION_MAX_AGE_MS / 1000),
+      retries: 0,
+      logFn: () => {},
+    }),
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 12,
+      maxAge: SESSION_MAX_AGE_MS,
     },
   });
+  return sessionHandler;
 }
 
 export function currentUser(req) {

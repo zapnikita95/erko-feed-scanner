@@ -28,6 +28,8 @@ function resolveDataDir() {
 
 export const DATA_DIR = resolveDataDir();
 export const CACHE_ROOT = path.join(DATA_DIR, 'cache');
+export const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
+export const CACHE_REFRESH_LOG_FILE = path.join(DATA_DIR, 'cache_refresh_daily.json');
 export const CLIENTS_FILE = path.join(DATA_DIR, 'clients.local.json');
 export const LEGACY_CACHE_ROOT = path.join(__dirname, 'cache');
 export const BUNDLED_CLIENTS_FILE = path.join(__dirname, 'data', 'clients.local.json');
@@ -55,6 +57,7 @@ export const ERKO_DEFAULT_CLIENTS = [
 export function ensureDataDirs() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(CACHE_ROOT, { recursive: true });
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
 function copyDirIfMissing(src, dst) {

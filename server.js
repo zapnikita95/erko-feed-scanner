@@ -13,6 +13,11 @@ import {
   scheduleNetworkCacheRefresh,
 } from './lib/cache_refresh.js';
 import {
+  canStartRefresh,
+  getRefreshQuota,
+  recordRefresh,
+} from './lib/cache_refresh_quota.js';
+import {
   currentUser,
   requireUser,
   requireUserPage,
@@ -316,14 +321,29 @@ async function warmFeedsForClient(client, { force = false, concurrency = 8 } = {
   };
 }
 
-function startNetworkCacheRefresh({ force = true, concurrency = 8 } = {}) {
-  return scheduleNetworkCacheRefresh({
+function startNetworkCacheRefresh({ force = true, concurrency = 8, source = 'manual' } = {}) {
+  const gate = canStartRefresh(source);
+  if (!gate.allowed) {
+    return {
+      started: false,
+      skipped: true,
+      reason: gate.reason,
+      message: gate.message,
+      quota: gate.quota,
+      ...getCacheRefreshStatus({ quota: gate.quota }),
+    };
+  }
+
+  const status = scheduleNetworkCacheRefresh({
     listClients,
     getClient,
     warmFeedsForClient,
     force,
     concurrency,
+    source,
+    onComplete: () => recordRefresh(source),
   });
+  return { started: true, skipped: false, quota: gate.quota, ...status };
 }
 
 async function runSearch(siteId, feeds, q, { concurrency = 16 } = {}) {
@@ -378,8 +398,17 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(result.status || 401).json({ error: result.message });
   }
   req.session.user = result.user;
-  const cacheRefresh = startNetworkCacheRefresh({ force: true });
-  res.json({ ok: true, user: result.user, cacheRefreshStarted: true, cacheRefresh });
+  req.session.save((err) => {
+    if (err) console.warn('[auth] session save failed:', err.message || err);
+    const refresh = startNetworkCacheRefresh({ force: true, source: 'login' });
+    res.json({
+      ok: true,
+      user: result.user,
+      cacheRefreshStarted: Boolean(refresh.started),
+      cacheRefreshSkipped: Boolean(refresh.skipped),
+      cacheRefresh: refresh,
+    });
+  });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -409,7 +438,7 @@ app.get('/api/clients', (req, res) => {
 });
 
 app.get('/api/cache/refresh/status', (req, res) => {
-  res.json(getCacheRefreshStatus());
+  res.json(getCacheRefreshStatus({ quota: getRefreshQuota() }));
 });
 
 app.post('/api/cache/refresh', (req, res) => {
@@ -417,14 +446,22 @@ app.post('/api/cache/refresh', (req, res) => {
   if (getCacheRefreshStatus().running) {
     return res.status(409).json({
       error: 'Обновление кэша уже выполняется.',
-      ...getCacheRefreshStatus(),
+      ...getCacheRefreshStatus({ quota: getRefreshQuota() }),
     });
   }
-  const status = startNetworkCacheRefresh({
+  const refresh = startNetworkCacheRefresh({
     force: force !== false,
     concurrency,
+    source: 'manual',
   });
-  res.json({ ok: true, started: true, ...status });
+  if (refresh.skipped) {
+    return res.status(429).json({
+      error: refresh.message,
+      reason: refresh.reason,
+      ...refresh,
+    });
+  }
+  res.json({ ok: true, ...refresh });
 });
 
 app.post('/api/clients', async (req, res) => {
@@ -648,6 +685,16 @@ app.post('/api/search-all', async (req, res) => {
 app.post('/api/warm-all', async (req, res) => {
   try {
     const { concurrency = 8, force = false } = req.body || {};
+    if (force === true) {
+      const gate = canStartRefresh('manual');
+      if (!gate.allowed) {
+        return res.status(429).json({
+          error: gate.message,
+          reason: gate.reason,
+          quota: gate.quota,
+        });
+      }
+    }
     const started = Date.now();
     const perBrand = [];
     let total = 0;
@@ -665,6 +712,10 @@ app.post('/api/warm-all', async (req, res) => {
       failed += r.failed;
     }
 
+    if (force === true && warmed > 0) {
+      recordRefresh('manual');
+    }
+
     res.json({
       elapsedMs: Date.now() - started,
       brands: perBrand.length,
@@ -673,6 +724,7 @@ app.post('/api/warm-all', async (req, res) => {
       failed,
       perBrand,
       force: force === true,
+      quota: getRefreshQuota(),
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
