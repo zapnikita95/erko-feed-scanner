@@ -53,9 +53,13 @@ export async function tryLogin(username, password, totp) {
   if (code.length !== 6) {
     return { ok: false, status: 401, message: 'Введите 6-значный код из приложения-аутентификатора.' };
   }
-  const ok = await dashboardLogin(u, password, code);
-  if (!ok) {
-    return { ok: false, status: 401, message: 'Неверный логин, пароль или код TOTP.' };
+  try {
+    const ok = await dashboardLogin(u, password, code);
+    if (!ok) {
+      return { ok: false, status: 401, message: 'Неверный логин, пароль или код TOTP.' };
+    }
+  } catch (e) {
+    return { ok: false, status: 502, message: String(e.message || e) };
   }
   return { ok: true, user: u.toLowerCase() };
 }
