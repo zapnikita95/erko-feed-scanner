@@ -22,7 +22,7 @@ git push -u origin main
    - `DATA_DIR` = `/data` (дублирует startCommand; без этого на Railway всё равно подхватится `/data`, если есть Volume)
    - `NODE_ENV` = `production`
    - `ALLOWED_EMAIL_SUFFIXES` = `@diginetica.com,@anyquery.ru,@tbank.ru` (при необходимости)
-4. После деплоя открыть URL → **Вход** (логин/пароль Dashboard + TOTP)
+4. После деплоя открыть URL → **Вход** (логин/пароль Dashboard + TOTP). После успешного входа кэш фидов **обновляется автоматически** (сначала Озерки, затем остальные бренды). Вручную — кнопка **«Обновить кэш»** в шапке.
 
 ## Что хранится на Volume
 

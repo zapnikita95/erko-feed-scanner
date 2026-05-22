@@ -2,7 +2,7 @@
   "clients": [
     {
       "siteId": "6390",
-      "name": "Супераптека (озерки)",
+      "name": "Озерки",
       "feedsListUrl": "https://superapteka.ru/export/ecom/ozerki/anyquery/feeds_list.json"
     },
     {

@@ -12,7 +12,14 @@
   <header class="app-header">
     <div class="row header-top">
       <h1>ЭРКАФАРМ — Feed Scanner</h1>
-      <button type="button" id="logout" class="ghost">Выйти</button>
+      <div class="header-actions">
+        <button type="button" id="refresh-cache" class="ghost" title="Скачать актуальные мастер-фиды и XML по всем брендам">Обновить кэш</button>
+        <button type="button" id="logout" class="ghost">Выйти</button>
+      </div>
+    </div>
+    <div id="cache-refresh-progress" class="partner-progress hidden" aria-live="polite">
+      <div class="progress-track"><div id="cache-refresh-bar" class="progress-bar"></div></div>
+      <div id="cache-refresh-status" class="progress-status"></div>
     </div>
     <div class="row client-row">
       <label>
@@ -25,7 +32,7 @@
       <div class="row">
         <label>
           <span class="label">Имя партнёра</span>
-          <input id="partner-name" type="text" placeholder="например, Супераптека (столетов)" autocomplete="off" />
+          <input id="partner-name" type="text" placeholder="например, Озерки" autocomplete="off" />
         </label>
         <label>
           <span class="label">siteID</span>

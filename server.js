@@ -9,6 +9,10 @@ import { fileURLToPath } from 'url';
 import { addLocalClient, defaultSiteId, getClient, listClients } from './clients.js';
 import { CACHE_ROOT, DATA_DIR, ensureDataDirs, getStorageStats } from './config.js';
 import {
+  getCacheRefreshStatus,
+  scheduleNetworkCacheRefresh,
+} from './lib/cache_refresh.js';
+import {
   currentUser,
   requireUser,
   requireUserPage,
@@ -282,6 +286,46 @@ async function searchInFeed(siteId, feed, q) {
   }
 }
 
+async function warmFeedsForClient(client, { force = false, concurrency = 8 } = {}) {
+  const meta = await loadFeedsMeta(client, { force });
+  const feeds = enrichFeeds(meta, client);
+  let ok = 0;
+  let fail = 0;
+  let idx = 0;
+  const workers = Math.min(Math.max(1, Number(concurrency) || 8), 16, feeds.length || 1);
+  async function worker() {
+    while (true) {
+      const i = idx++;
+      if (i >= feeds.length) return;
+      try {
+        await getCachedFeedXml(client.siteId, feeds[i].url, { force });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+  }
+  if (feeds.length) await Promise.all(Array.from({ length: workers }, worker));
+  return {
+    siteId: client.siteId,
+    name: client.name,
+    total: feeds.length,
+    warmed: ok,
+    failed: fail,
+    metaRefreshed: Boolean(force),
+  };
+}
+
+function startNetworkCacheRefresh({ force = true, concurrency = 8 } = {}) {
+  return scheduleNetworkCacheRefresh({
+    listClients,
+    getClient,
+    warmFeedsForClient,
+    force,
+    concurrency,
+  });
+}
+
 async function runSearch(siteId, feeds, q, { concurrency = 16 } = {}) {
   const results = new Array(feeds.length);
   let idx = 0;
@@ -334,7 +378,8 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(result.status || 401).json({ error: result.message });
   }
   req.session.user = result.user;
-  res.json({ ok: true, user: result.user });
+  const cacheRefresh = startNetworkCacheRefresh({ force: true });
+  res.json({ ok: true, user: result.user, cacheRefreshStarted: true, cacheRefresh });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -361,6 +406,25 @@ app.use(express.static(publicDir, { index: false }));
 
 app.get('/api/clients', (req, res) => {
   res.json({ clients: listClients() });
+});
+
+app.get('/api/cache/refresh/status', (req, res) => {
+  res.json(getCacheRefreshStatus());
+});
+
+app.post('/api/cache/refresh', (req, res) => {
+  const { concurrency = 8, force = true } = req.body || {};
+  if (getCacheRefreshStatus().running) {
+    return res.status(409).json({
+      error: 'Обновление кэша уже выполняется.',
+      ...getCacheRefreshStatus(),
+    });
+  }
+  const status = startNetworkCacheRefresh({
+    force: force !== false,
+    concurrency,
+  });
+  res.json({ ok: true, started: true, ...status });
 });
 
 app.post('/api/clients', async (req, res) => {
@@ -583,52 +647,32 @@ app.post('/api/search-all', async (req, res) => {
 
 app.post('/api/warm-all', async (req, res) => {
   try {
-    const { concurrency = 8 } = req.body || {};
+    const { concurrency = 8, force = false } = req.body || {};
     const started = Date.now();
-    const brandBlocks = await loadAllNetworkFeeds();
     const perBrand = [];
     let total = 0;
     let warmed = 0;
     let failed = 0;
 
-    for (const block of brandBlocks) {
-      let ok = 0;
-      let fail = 0;
-      let idx = 0;
-      const feeds = block.feeds;
-      total += feeds.length;
-      const workers = Math.min(Math.max(1, Number(concurrency) || 8), 16, feeds.length || 1);
-      async function worker() {
-        while (true) {
-          const i = idx++;
-          if (i >= feeds.length) return;
-          try {
-            await getCachedFeedXml(block.siteId, feeds[i].url);
-            ok++;
-          } catch {
-            fail++;
-          }
-        }
-      }
-      if (feeds.length) await Promise.all(Array.from({ length: workers }, worker));
-      warmed += ok;
-      failed += fail;
-      perBrand.push({
-        siteId: block.siteId,
-        name: block.name,
-        total: feeds.length,
-        warmed: ok,
-        failed: fail,
+    for (const c of listClients()) {
+      const r = await warmFeedsForClient(getClient(c.siteId), {
+        force: force === true,
+        concurrency,
       });
+      perBrand.push(r);
+      total += r.total;
+      warmed += r.warmed;
+      failed += r.failed;
     }
 
     res.json({
       elapsedMs: Date.now() - started,
-      brands: brandBlocks.length,
+      brands: perBrand.length,
       total,
       warmed,
       failed,
       perBrand,
+      force: force === true,
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
@@ -638,9 +682,8 @@ app.post('/api/warm-all', async (req, res) => {
 app.post('/api/warm', async (req, res) => {
   try {
     const client = getClient(parseSiteId(req));
-    const siteId = client.siteId;
-    const { feedIds, city, kinds, warmAll, concurrency = 8 } = req.body || {};
-    const meta = await loadFeedsMeta(client);
+    const { feedIds, city, kinds, warmAll, concurrency = 8, force = false } = req.body || {};
+    const meta = await loadFeedsMeta(client, { force: force === true });
     let feeds = enrichFeeds(meta, client);
     if (Array.isArray(feedIds) && feedIds.length) {
       const set = new Set(feedIds);
@@ -648,7 +691,7 @@ app.post('/api/warm', async (req, res) => {
     } else if (city) {
       feeds = feedsForCityAndKinds(feeds, city, kinds, { defaultWhenKindsEmpty: ['store'] });
     } else if (warmAll === true) {
-      // Все фиды: только скачивание XML (см. worker ниже), без parseOffers.
+      // все фиды партнёра
     } else {
       return res.status(400).json({
         error:
@@ -659,16 +702,16 @@ app.post('/api/warm', async (req, res) => {
       return res.status(400).json({ error: 'Нет фидов для прогрева по текущим условиям.' });
     }
     const started = Date.now();
-    let ok = 0, fail = 0;
+    let ok = 0;
+    let fail = 0;
     let idx = 0;
     const workers = Math.min(Math.max(1, Number(concurrency) || 8), 16, feeds.length);
-    // Только скачиваем XML в кэш — без parseOffers (иначе CPU и минуты на каждый фид).
     async function worker() {
       while (true) {
         const i = idx++;
         if (i >= feeds.length) return;
         try {
-          await getCachedFeedXml(siteId, feeds[i].url);
+          await getCachedFeedXml(client.siteId, feeds[i].url, { force: force === true });
           ok++;
         } catch {
           fail++;
@@ -676,7 +719,14 @@ app.post('/api/warm', async (req, res) => {
       }
     }
     await Promise.all(Array.from({ length: workers }, worker));
-    res.json({ siteId, warmed: ok, failed: fail, elapsedMs: Date.now() - started, total: feeds.length });
+    res.json({
+      siteId: client.siteId,
+      warmed: ok,
+      failed: fail,
+      elapsedMs: Date.now() - started,
+      total: feeds.length,
+      force: force === true,
+    });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }

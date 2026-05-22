@@ -37,7 +37,7 @@ export const LEGACY_DATA_CACHE = path.join(__dirname, 'data', 'cache');
 export const ERKO_DEFAULT_CLIENTS = [
   {
     siteId: '6390',
-    name: 'Супераптека (озерки)',
+    name: 'Озерки',
     feedsListUrl: 'https://superapteka.ru/export/ecom/ozerki/anyquery/feeds_list.json',
   },
   {

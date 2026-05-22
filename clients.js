@@ -72,6 +72,21 @@ export function seedErkoDefaults() {
 
 seedErkoDefaults();
 
+/** Старые подписи в Volume → актуальные имена в UI. */
+export function migrateErkoDisplayNames() {
+  const records = readLocalClientRecords();
+  let changed = false;
+  for (const r of records) {
+    if (String(r.siteId) === '6390' && r.name !== 'Озерки') {
+      r.name = 'Озерки';
+      changed = true;
+    }
+  }
+  if (changed) writeLocalClientRecords(records);
+}
+
+migrateErkoDisplayNames();
+
 function normalizeLocalClient(record) {
   return {
     siteId: String(record.siteId),

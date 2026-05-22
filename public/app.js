@@ -570,6 +570,110 @@ async function runNetworkSearch() {
   }
 }
 
+let cacheRefreshPollTimer = null;
+
+function setCacheRefreshProgress(percent, text, cls = '') {
+  const box = $('#cache-refresh-progress');
+  const bar = $('#cache-refresh-bar');
+  const status = $('#cache-refresh-status');
+  if (!box || !bar || !status) return;
+  box.classList.remove('hidden');
+  bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  status.className = `progress-status ${cls}`;
+  status.textContent = text;
+}
+
+function hideCacheRefreshProgress() {
+  const box = $('#cache-refresh-progress');
+  if (box) box.classList.add('hidden');
+}
+
+function stopCacheRefreshPoll() {
+  if (cacheRefreshPollTimer) {
+    clearInterval(cacheRefreshPollTimer);
+    cacheRefreshPollTimer = null;
+  }
+}
+
+function formatCacheRefreshStatus(data) {
+  if (data.running) {
+    const cur = data.current ? ` · ${data.current}` : '';
+    const prog = data.total ? ` ${data.warmed || 0}/${data.total} XML` : '';
+    return `Обновляем кэш${cur}${prog}…`;
+  }
+  if (data.error) return `Ошибка обновления кэша: ${data.error}`;
+  const warmed = data.warmed ?? 0;
+  const total = data.total ?? 0;
+  const failed = data.failed ?? 0;
+  return `Кэш обновлён: ${warmed}/${total} XML${failed ? `, ошибок: ${failed}` : ''}.`;
+}
+
+async function pollCacheRefreshStatus() {
+  try {
+    const res = await apiFetch('/api/cache/refresh/status');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+
+    const pct = data.total
+      ? Math.round(((data.warmed || 0) / data.total) * 100)
+      : data.running
+        ? 8
+        : 100;
+    const text = formatCacheRefreshStatus(data);
+    setCacheRefreshProgress(pct, text, data.error ? 'error' : data.running ? '' : 'success');
+
+    const btn = $('#refresh-cache');
+    if (btn) btn.disabled = Boolean(data.running);
+
+    if (!data.running) {
+      stopCacheRefreshPoll();
+      await refreshClients();
+      await loadFeeds();
+      await loadNetworkSummary();
+      updateCacheInfo();
+      if (!data.error) setTimeout(hideCacheRefreshProgress, 8000);
+    }
+    return data;
+  } catch (e) {
+    stopCacheRefreshPoll();
+    setCacheRefreshProgress(0, String(e.message || e), 'error');
+    const btn = $('#refresh-cache');
+    if (btn) btn.disabled = false;
+    throw e;
+  }
+}
+
+function startCacheRefreshPoll() {
+  stopCacheRefreshPoll();
+  pollCacheRefreshStatus().catch(() => {});
+  cacheRefreshPollTimer = setInterval(() => {
+    pollCacheRefreshStatus().catch(() => {});
+  }, 2500);
+}
+
+async function requestCacheRefresh() {
+  const btn = $('#refresh-cache');
+  if (btn) btn.disabled = true;
+  setCacheRefreshProgress(4, 'Запускаем обновление кэша (сначала Озерки)…');
+  try {
+    const res = await apiFetch('/api/cache/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ force: true }),
+    });
+    const data = await res.json();
+    if (res.status === 409) {
+      startCacheRefreshPoll();
+      return;
+    }
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    startCacheRefreshPoll();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    setCacheRefreshProgress(0, String(e.message || e), 'error');
+  }
+}
+
 async function warmNetworkAll() {
   if (!confirm('Прогреть XML всех фидов всех брендов? Это может занять много времени.')) return;
   setNetworkStatus('loading', 'Прогреваем все фиды всех брендов…');
@@ -577,7 +681,7 @@ async function warmNetworkAll() {
     const res = await apiFetch('/api/warm-all', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ force: true }),
       signal: longFetchSignal(7_200_000),
     });
     const data = await res.json();
@@ -878,6 +982,11 @@ async function logout() {
 async function boot() {
   await ensureAuth();
   await initClients();
+  const statusRes = await fetch('/api/cache/refresh/status', { credentials: 'include' });
+  if (statusRes.ok) {
+    const st = await statusRes.json();
+    if (st.running) startCacheRefreshPoll();
+  }
   await loadFeeds();
   await loadNetworkSummary();
 }
@@ -888,3 +997,16 @@ boot().catch((e) => {
 
 const logoutBtn = document.getElementById('logout');
 if (logoutBtn) logoutBtn.addEventListener('click', logout);
+const refreshCacheBtn = document.getElementById('refresh-cache');
+if (refreshCacheBtn) {
+  refreshCacheBtn.addEventListener('click', () => {
+    if (
+      !confirm(
+        'Обновить кэш по всем брендам? Сначала Озерки, затем остальные. Скачаются актуальные мастер-фиды и XML.',
+      )
+    ) {
+      return;
+    }
+    requestCacheRefresh();
+  });
+}
