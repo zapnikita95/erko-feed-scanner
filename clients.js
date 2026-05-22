@@ -1,5 +1,5 @@
 /**
- * Партнёры сети Эрко Фарм — только из data/clients.local.json (+ дефолтный seed).
+ * Партнёры сети ЭРКАФАРМ — только из data/clients.local.json (+ дефолтный seed).
  */
 
 import fs from 'fs';
@@ -51,7 +51,7 @@ function writeLocalClientRecords(clients) {
   fs.writeFileSync(CLIENTS_FILE, JSON.stringify({ clients }, null, 2));
 }
 
-/** Дописывает дефолтных партнёров Эрко, если их ещё нет в файле. */
+/** Дописывает дефолтных партнёров ЭРКАФАРМ, если их ещё нет в файле. */
 export function seedErkoDefaults() {
   const records = readLocalClientRecords();
   const byId = new Map(records.map((c) => [String(c.siteId), c]));

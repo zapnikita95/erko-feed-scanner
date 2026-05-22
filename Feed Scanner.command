@@ -1,5 +1,5 @@
 #!/bin/bash
-# Эрко Фарм Feed Scanner — запуск локального UI (macOS).
+# ЭРКАФАРМ Feed Scanner — запуск локального UI (macOS).
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
@@ -10,7 +10,7 @@ if [[ ! -d node_modules ]]; then
 fi
 export PORT="${PORT:-4173}"
 URL="http://127.0.0.1:${PORT}/"
-echo "Эрко Фарм Feed Scanner → $URL"
+echo "ЭРКАФАРМ Feed Scanner → $URL"
 echo "Остановка: закрой это окно или Ctrl+C."
 
 if curl -sf "http://127.0.0.1:${PORT}/api/health" | grep -q '"app":"erko-feed-scanner"'; then

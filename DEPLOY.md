@@ -1,4 +1,4 @@
-# Эрко Фарм Feed Scanner — деплой
+# ЭРКАФАРМ Feed Scanner — деплой
 
 ## GitHub
 
@@ -21,7 +21,7 @@ git push -u origin main
    - `SESSION_SECRET` — случайная строка 32+ символов
    - `DATA_DIR` = `/data`
    - `NODE_ENV` = `production`
-   - `ALLOWED_EMAIL_SUFFIXES` = `@diginetica.com,@anyquery.ru` (при необходимости)
+   - `ALLOWED_EMAIL_SUFFIXES` = `@diginetica.com,@anyquery.ru,@tbank.ru` (при необходимости)
 4. После деплоя открыть URL → **Вход** (логин/пароль Dashboard + TOTP)
 
 ## Что хранится на Volume

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Эрко Фарм — Feed Scanner</title>
+<title>ЭРКАФАРМ — Feed Scanner</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/style.css" />
 </head>
@@ -11,7 +11,7 @@
 <div class="app">
   <header class="app-header">
     <div class="row header-top">
-      <h1>Эрко Фарм — Feed Scanner</h1>
+      <h1>ЭРКАФАРМ — Feed Scanner</h1>
       <button type="button" id="logout" class="ghost">Выйти</button>
     </div>
     <div class="row client-row">
@@ -49,7 +49,24 @@
     </div>
   </header>
 
+  <section class="card network-card">
+    <h2 class="section-title">По всем брендам сети</h2>
+    <p class="hint section-hint">Поиск сразу по всем фидам всех партнёров, указанных в сервисе. Результаты — по брендам (сворачиваемые блоки).</p>
+    <div class="row">
+      <label class="grow">
+        <span class="label">Поиск товара (все бренды)</span>
+        <input id="network-query" type="text" placeholder="URL, ID оффера или slug" />
+      </label>
+      <button id="network-run" class="primary">Искать везде</button>
+      <button id="network-warm" class="ghost" title="Скачать XML всех брендов в кэш">Прогреть все фиды</button>
+    </div>
+    <p id="network-summary" class="summary"></p>
+    <div class="row"><div id="network-status" class="status"></div></div>
+    <div id="network-results" class="network-results"></div>
+  </section>
+
   <section class="card">
+    <h2 class="section-title">По одному бренду</h2>
     <div class="row">
       <label class="grow">
         <span class="label">Поиск товара</span>

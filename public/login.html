@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <title>Вход — Эрко Фарм Feed Scanner</title>
+  <title>Вход — ЭРКАФАРМ Feed Scanner</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #f5f6f8; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 2rem; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,.06); }
@@ -20,7 +20,7 @@
 </head>
 <body>
   <div class="card">
-    <h1>Эрко Фарм</h1>
+    <h1>ЭРКАФАРМ</h1>
     <p class="sub">Feed Scanner — вход через Dashboard. После «Войти» введите код из приложения-аутентификатора.</p>
     <div id="err" class="err"></div>
     <form id="loginForm">
@@ -39,7 +39,7 @@
       btn.disabled = true;
       errEl.style.display = 'none';
       try {
-        const totp = await promptDashboardTotp('Вход в Эрко Фарм Feed Scanner. Код из приложения.');
+        const totp = await promptDashboardTotp('Вход в ЭРКАФАРМ Feed Scanner. Код из приложения.');
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },

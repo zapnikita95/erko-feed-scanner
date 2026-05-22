@@ -164,6 +164,7 @@ async function addPartner() {
     $('#city-store-search').value = '';
     $('#feed-filter').value = '';
     await loadFeeds();
+    await loadNetworkSummary();
   } catch (e) {
     const msg = String(e.message || e);
     setAddPartnerProgress(
@@ -181,7 +182,7 @@ async function addPartner() {
 
 function updateClientMeta() {
   $('#feeds-list-url').textContent = state.feedsListUrl || '—';
-  document.title = `Эрко Фарм — ${state.clientName || state.siteId}`;
+  document.title = `ЭРКАФАРМ — ${state.clientName || state.siteId}`;
 }
 
 async function loadFeeds() {
@@ -493,6 +494,105 @@ function setStatus(cls, text) {
   el.textContent = text || '';
 }
 
+function setNetworkStatus(cls, text) {
+  const el = $('#network-status');
+  if (!el) return;
+  el.className = 'status ' + (cls || '');
+  el.textContent = text || '';
+}
+
+async function loadNetworkSummary() {
+  const el = $('#network-summary');
+  if (!el) return;
+  try {
+    const res = await apiFetch('/api/network-summary');
+    const data = await res.json();
+    const lines = (data.brands || []).map(
+      (b) => `${b.name}: ${b.feedsCount} фидов, в кэше ${b.cachedCount} XML`,
+    );
+    el.textContent = `В сети ${data.brands?.length || 0} брендов, ${data.totalFeeds || 0} фидов, в кэше ${data.totalCached || 0} XML. ${lines.join(' · ')}`;
+  } catch {
+    el.textContent = '';
+  }
+}
+
+function renderNetworkResults(data) {
+  const out = $('#network-results');
+  if (!out) return;
+  out.innerHTML = '';
+  if (!data.brands?.length) {
+    const p = document.createElement('p');
+    p.className = 'nohit';
+    p.textContent = 'Совпадений не найдено ни у одного бренда.';
+    out.appendChild(p);
+    return;
+  }
+  for (const brand of data.brands) {
+    const details = document.createElement('details');
+    details.className = 'brand-group';
+    details.open = data.brands.length <= 3;
+    const summary = document.createElement('summary');
+    summary.textContent = `${brand.name} (site ${brand.siteId}) — ${brand.hitsCount} совпадений`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'brand-body';
+    body.appendChild(buildHitTable(brand.results));
+    details.appendChild(body);
+    out.appendChild(details);
+  }
+}
+
+async function runNetworkSearch() {
+  const query = $('#network-query')?.value?.trim();
+  if (!query) {
+    setNetworkStatus('error', 'Введите запрос');
+    return;
+  }
+  setNetworkStatus('loading', 'Сканируем все бренды и фиды…');
+  const started = performance.now();
+  try {
+    const res = await apiFetch('/api/search-all', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+      signal: longFetchSignal(3_600_000),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    const ms = Math.round(performance.now() - started);
+    setNetworkStatus(
+      '',
+      `Брендов: ${data.brandsScanned}, фидов: ${data.feedsScanned}, совпадений: ${data.hitsCount}, ${data.elapsedMs} мс (сервер), ${ms} мс (клиент).`,
+    );
+    renderNetworkResults(data);
+  } catch (e) {
+    setNetworkStatus('error', String(e.message || e));
+  }
+}
+
+async function warmNetworkAll() {
+  if (!confirm('Прогреть XML всех фидов всех брендов? Это может занять много времени.')) return;
+  setNetworkStatus('loading', 'Прогреваем все фиды всех брендов…');
+  try {
+    const res = await apiFetch('/api/warm-all', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+      signal: longFetchSignal(7_200_000),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    setNetworkStatus(
+      '',
+      `Прогрето ${data.warmed}/${data.total} за ${data.elapsedMs} мс. Ошибок: ${data.failed}.`,
+    );
+    await loadNetworkSummary();
+    updateCacheInfo();
+  } catch (e) {
+    setNetworkStatus('error', String(e.message || e));
+  }
+}
+
 function renderResults(data) {
   const out = $('#results');
   out.innerHTML = '';
@@ -700,6 +800,11 @@ async function warmCache() {
   }
 }
 
+$('#network-run')?.addEventListener('click', runNetworkSearch);
+$('#network-query')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runNetworkSearch();
+});
+$('#network-warm')?.addEventListener('click', warmNetworkAll);
 $('#run').addEventListener('click', runSearch);
 $('#query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') runSearch();
@@ -774,6 +879,7 @@ async function boot() {
   await ensureAuth();
   await initClients();
   await loadFeeds();
+  await loadNetworkSummary();
 }
 boot().catch((e) => {
   if (String(e.message || e) === 'auth_required') return;

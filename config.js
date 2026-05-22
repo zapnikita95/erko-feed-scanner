@@ -13,7 +13,7 @@ export const CACHE_ROOT = path.join(DATA_DIR, 'cache');
 export const CLIENTS_FILE = path.join(DATA_DIR, 'clients.local.json');
 export const LEGACY_CACHE_ROOT = path.join(__dirname, 'cache');
 
-/** Партнёры сети Эрко Фарм (без amwine и прочих «онлайн» проектов). */
+/** Партнёры сети ЭРКАФАРМ (без amwine и прочих «онлайн» проектов). */
 export const ERKO_DEFAULT_CLIENTS = [
   {
     siteId: '6390',

@@ -1,4 +1,4 @@
-// Эрко Фарм — Feed Scanner: поиск товара по YML-фидам аптек сети.
+// ЭРКАФАРМ — Feed Scanner: поиск товара по YML-фидам аптек сети.
 
 import express from 'express';
 import fs from 'fs';
@@ -7,6 +7,34 @@ import crypto from 'crypto';
 import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 import { addLocalClient, defaultSiteId, getClient, listClients } from './clients.js';
+
+function mapSearchResult(r) {
+  return {
+    externalId: r.feed.externalId,
+    title: r.feed.title,
+    feedUrl: r.feed.url,
+    kind: r.feed.kind,
+    city: r.feed.city,
+    total: r.total,
+    error: r.error,
+    matches: r.matches,
+  };
+}
+
+async function loadAllNetworkFeeds() {
+  const brands = [];
+  for (const c of listClients()) {
+    const client = getClient(c.siteId);
+    const meta = await loadFeedsMeta(client);
+    const feeds = enrichFeeds(meta, client).map(f => ({
+      ...f,
+      siteId: client.siteId,
+      clientName: client.name,
+    }));
+    brands.push({ siteId: client.siteId, name: client.name, feeds });
+  }
+  return brands;
+}
 import {
   CACHE_ROOT,
   DATA_DIR,
@@ -470,16 +498,137 @@ app.post('/api/search', async (req, res) => {
       hitsCount: hits.length,
       note,
       globalAutoScanned,
-      results: results.map(r => ({
-        externalId: r.feed.externalId,
-        title: r.feed.title,
-        feedUrl: r.feed.url,
-        kind: r.feed.kind,
-        city: r.feed.city,
-        total: r.total,
-        error: r.error,
-        matches: r.matches,
-      })),
+      results: results.map(mapSearchResult),
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/network-summary', async (_req, res) => {
+  try {
+    const brands = [];
+    let totalFeeds = 0;
+    let totalCached = 0;
+    for (const c of listClients()) {
+      const client = getClient(c.siteId);
+      const meta = await loadFeedsMeta(client);
+      const feeds = enrichFeeds(meta, client);
+      const dir = cacheDirForSite(client.siteId);
+      const cached = fs.existsSync(dir)
+        ? fs.readdirSync(dir).filter(f => f.endsWith('.xml.gz')).length
+        : 0;
+      totalFeeds += feeds.length;
+      totalCached += cached;
+      brands.push({
+        siteId: client.siteId,
+        name: client.name,
+        feedsCount: feeds.length,
+        cachedCount: cached,
+      });
+    }
+    res.json({ brands, totalFeeds, totalCached });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post('/api/search-all', async (req, res) => {
+  try {
+    const { query, concurrency = 12 } = req.body || {};
+    const q = normalizeQuery(query);
+    if (q.kind === 'empty') return res.status(400).json({ error: 'Empty query' });
+
+    const started = Date.now();
+    const brandBlocks = await loadAllNetworkFeeds();
+    const brandsOut = [];
+    let feedsScanned = 0;
+    let hitsCount = 0;
+
+    for (const block of brandBlocks) {
+      let results = await runSearch(block.siteId, block.feeds, q, { concurrency });
+      if (!results.some(r => r.matches.length) && q.kind !== 'id') {
+        const globalFeed = block.feeds.find(f => f.kind === 'global');
+        if (globalFeed) {
+          const globalResult = await searchInFeed(block.siteId, globalFeed, q);
+          if (globalResult.matches.length) results = [...results, globalResult];
+        }
+      }
+      feedsScanned += block.feeds.length;
+      const hits = results.filter(r => r.matches.length);
+      hitsCount += hits.length;
+      if (hits.length) {
+        brandsOut.push({
+          siteId: block.siteId,
+          name: block.name,
+          hitsCount: hits.length,
+          results: hits.map(r => ({ ...mapSearchResult(r), siteId: block.siteId, clientName: block.name })),
+        });
+      }
+    }
+
+    brandsOut.sort((a, b) => b.hitsCount - a.hitsCount);
+    res.json({
+      query: q,
+      brandsScanned: brandBlocks.length,
+      feedsScanned,
+      hitsCount,
+      elapsedMs: Date.now() - started,
+      brands: brandsOut,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post('/api/warm-all', async (req, res) => {
+  try {
+    const { concurrency = 8 } = req.body || {};
+    const started = Date.now();
+    const brandBlocks = await loadAllNetworkFeeds();
+    const perBrand = [];
+    let total = 0;
+    let warmed = 0;
+    let failed = 0;
+
+    for (const block of brandBlocks) {
+      let ok = 0;
+      let fail = 0;
+      let idx = 0;
+      const feeds = block.feeds;
+      total += feeds.length;
+      const workers = Math.min(Math.max(1, Number(concurrency) || 8), 16, feeds.length || 1);
+      async function worker() {
+        while (true) {
+          const i = idx++;
+          if (i >= feeds.length) return;
+          try {
+            await getCachedFeedXml(block.siteId, feeds[i].url);
+            ok++;
+          } catch {
+            fail++;
+          }
+        }
+      }
+      if (feeds.length) await Promise.all(Array.from({ length: workers }, worker));
+      warmed += ok;
+      failed += fail;
+      perBrand.push({
+        siteId: block.siteId,
+        name: block.name,
+        total: feeds.length,
+        warmed: ok,
+        failed: fail,
+      });
+    }
+
+    res.json({
+      elapsedMs: Date.now() - started,
+      brands: brandBlocks.length,
+      total,
+      warmed,
+      failed,
+      perBrand,
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

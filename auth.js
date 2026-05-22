@@ -4,7 +4,7 @@ import { dashboardLogin, cleanTotp } from './lib/dashboard_auth.js';
 const SESSION_SECRET =
   process.env.SESSION_SECRET || 'dev-only-change-me-on-railway-min-32-chars';
 
-const ALLOWED_SUFFIXES = (process.env.ALLOWED_EMAIL_SUFFIXES || '@diginetica.com,@anyquery.ru')
+const ALLOWED_SUFFIXES = (process.env.ALLOWED_EMAIL_SUFFIXES || '@diginetica.com,@anyquery.ru,@tbank.ru')
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
