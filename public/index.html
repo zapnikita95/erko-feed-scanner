@@ -21,7 +21,33 @@
       <div class="progress-track"><div id="cache-refresh-bar" class="progress-bar"></div></div>
       <div id="cache-refresh-status" class="progress-status"></div>
     </div>
-    <div class="row client-row">
+    <p class="sub header-sub">Ниже — <strong>два разных режима поиска</strong>. Кэш обновляется только кнопкой «Обновить кэш» в шапке.</p>
+  </header>
+
+  <!-- ========== РАЗДЕЛ 1: ВСЯ СЕТЬ ========== -->
+  <section class="card search-mode-all" id="section-all-brands" aria-labelledby="title-all-brands">
+    <span class="mode-badge mode-all">Раздел 1 · вся сеть</span>
+    <h2 class="section-title" id="title-all-brands">Поиск по всем брендам</h2>
+    <p class="hint section-hint">Сканируются фиды <strong>всех</strong> партнёров сразу. Выбор site_id здесь не нужен — бренд не выбирается.</p>
+    <div class="row">
+      <label class="grow">
+        <span class="label">Запрос (URL, ID оффера или slug)</span>
+        <input id="network-query" type="text" placeholder="URL, ID оффера или slug" />
+      </label>
+      <button id="network-run" class="primary">Искать по всей сети</button>
+    </div>
+    <p id="network-summary" class="summary"></p>
+    <div class="row"><div id="network-status" class="status"></div></div>
+    <div id="network-results" class="network-results results-block"></div>
+  </section>
+
+  <!-- ========== РАЗДЕЛ 2: ОДИН БРЕНД ========== -->
+  <section class="card search-mode-brand" id="section-one-brand" aria-labelledby="title-one-brand">
+    <span class="mode-badge mode-brand">Раздел 2 · один бренд</span>
+    <h2 class="section-title" id="title-one-brand">Поиск по одному бренду</h2>
+    <p class="hint section-hint">Сначала выберите партнёра — поиск и фильтры фидов относятся <strong>только к нему</strong>.</p>
+
+    <div class="row client-row brand-client-row">
       <label>
         <span class="label">Партнёр (site_id)</span>
         <select id="client-site"></select>
@@ -50,109 +76,88 @@
         <div id="add-partner-status" class="progress-status"></div>
       </div>
     </div>
-    <div class="sub" id="client-description">
-      Проверяем, в каких фидах есть товар. Источник списка:
+    <div class="sub brand-meta" id="client-description">
+      Мастер-фид выбранного бренда:
       <code id="feeds-list-url">—</code>
     </div>
-  </header>
 
-  <section class="card network-card">
-    <h2 class="section-title">По всем брендам сети</h2>
-    <p class="hint section-hint">Поиск сразу по всем фидам всех партнёров, указанных в сервисе. Результаты — по брендам (сворачиваемые блоки).</p>
-    <div class="row">
-      <label class="grow">
-        <span class="label">Поиск товара (все бренды)</span>
-        <input id="network-query" type="text" placeholder="URL, ID оффера или slug" />
-      </label>
-      <button id="network-run" class="primary">Искать везде</button>
-      <button id="network-warm" class="ghost" title="Скачать XML всех брендов в кэш">Прогреть все фиды</button>
-    </div>
-    <p id="network-summary" class="summary"></p>
-    <div class="row"><div id="network-status" class="status"></div></div>
-    <div id="network-results" class="network-results"></div>
-  </section>
-
-  <section class="card">
-    <h2 class="section-title">По одному бренду</h2>
-    <div class="row">
-      <label class="grow">
-        <span class="label">Поиск товара</span>
-        <input id="query" type="text" placeholder="URL, ID оффера или часть слага в URL" />
-      </label>
-      <button id="run" class="primary">Искать</button>
-    </div>
-    <div class="hint">
-      В YML-фидах у офферов часто нет «названия» — только <code>id</code>, <code>url</code>, <code>price</code>.
-      Поиск по URL / slug (последний сегмент пути) или по <code>&lt;offer id="..."&gt;</code>.
-    </div>
-  </section>
-
-  <section class="card">
-    <div class="row tabs">
-      <button class="tab active" data-tab="cities">По городам / регионам</button>
-      <button class="tab" data-tab="feeds">Фильтр по фидам</button>
-    </div>
-
-    <div class="tab-content" data-tab="cities">
+    <div class="brand-search-block">
       <div class="row">
         <label class="grow">
-          <span class="label">Город (или подпись региона для аптек)</span>
-          <select id="city"><option value="">— любой —</option></select>
+          <span class="label">Запрос по фидам выбранного бренда</span>
+          <input id="query" type="text" placeholder="URL, ID оффера или часть слага в URL" />
         </label>
-        <label>
-          <span class="label">Типы фидов</span>
-          <span class="kind-toggle">
-            <label><input type="checkbox" class="kind" value="city" checked /> регион / городской</label>
-            <label><input type="checkbox" class="kind" value="store" checked /> точки</label>
-            <label><input type="checkbox" class="kind" value="global" checked /> global</label>
-          </span>
-        </label>
-        <button id="warm" class="ghost" title="Предзагрузить в кэш">Прогреть кэш</button>
+        <button id="run" class="primary">Искать в бренде</button>
       </div>
-      <label class="warm-all-row">
-        <input type="checkbox" id="warm-all" />
-        <span class="warm-all-text">Прогреть <strong>все</strong> фиды партнёра (<span id="warm-all-count">—</span> шт.) — только скачивание XML в кэш, без парсинга; может занять много времени</span>
-      </label>
-      <div class="city-store-block">
+      <div class="hint">
+        В YML часто нет «названия» товара — только <code>id</code>, <code>url</code>, <code>price</code>.
+        Поиск по URL / slug или по <code>&lt;offer id="..."&gt;</code>.
+      </div>
+    </div>
+
+    <div class="feed-filters-block">
+      <p class="filters-heading">Ограничить, в каких фидах бренда искать</p>
+      <div class="row tabs">
+        <button class="tab active" data-tab="cities">По городам / регионам</button>
+        <button class="tab" data-tab="feeds">Фильтр по фидам</button>
+      </div>
+
+      <div class="tab-content" data-tab="cities">
         <div class="row">
           <label class="grow">
-            <span class="label">Конкретная точка — поиск по названию фида или по ID (<code>externalId</code>)</span>
-            <input id="city-store-search" type="text" placeholder="Адрес, название или ID фида" autocomplete="off" disabled />
+            <span class="label">Город (или подпись региона для аптек)</span>
+            <select id="city"><option value="">— любой —</option></select>
           </label>
-          <button type="button" id="clear-city-stores" class="ghost" disabled>Снять выбор</button>
+          <label>
+            <span class="label">Типы фидов</span>
+            <span class="kind-toggle">
+              <label><input type="checkbox" class="kind" value="city" checked /> регион / городской</label>
+              <label><input type="checkbox" class="kind" value="store" checked /> точки</label>
+              <label><input type="checkbox" class="kind" value="global" checked /> global</label>
+            </span>
+          </label>
         </div>
-        <p id="city-store-hint" class="hint"></p>
-        <div id="city-store-list" class="feed-list city-store-list"></div>
-        <div id="city-selection-summary" class="summary city-selection-summary"></div>
+        <div class="city-store-block">
+          <div class="row">
+            <label class="grow">
+              <span class="label">Конкретная точка — по названию фида или по ID (<code>externalId</code>)</span>
+              <input id="city-store-search" type="text" placeholder="Адрес, название или ID фида" autocomplete="off" disabled />
+            </label>
+            <button type="button" id="clear-city-stores" class="ghost" disabled>Снять выбор</button>
+          </div>
+          <p id="city-store-hint" class="hint"></p>
+          <div id="city-store-list" class="feed-list city-store-list"></div>
+          <div id="city-selection-summary" class="summary city-selection-summary"></div>
+        </div>
+        <div id="city-summary" class="summary"></div>
       </div>
-      <div id="city-summary" class="summary"></div>
+
+      <div class="tab-content hidden" data-tab="feeds">
+        <div class="row">
+          <label class="grow">
+            <span class="label">Фильтр по названию / ID фида</span>
+            <input id="feed-filter" type="text" placeholder="Москва, region_14, 1371…" />
+          </label>
+          <label>
+            <span class="label">Выбрано</span>
+            <span id="selected-count" class="badge">0</span>
+          </label>
+          <button id="select-visible" class="ghost">Выбрать все видимые</button>
+          <button id="clear-selection" class="ghost">Снять выделение</button>
+        </div>
+        <div id="feed-list" class="feed-list"></div>
+      </div>
     </div>
 
-    <div class="tab-content hidden" data-tab="feeds">
-      <div class="row">
-        <label class="grow">
-          <span class="label">Фильтр по названию / ID фида</span>
-          <input id="feed-filter" type="text" placeholder="Москва, region_14, 1371…" />
-        </label>
-        <label>
-          <span class="label">Выбрано</span>
-          <span id="selected-count" class="badge">0</span>
-        </label>
-        <button id="select-visible" class="ghost">Выбрать все видимые</button>
-        <button id="clear-selection" class="ghost">Снять выделение</button>
+    <div class="brand-results-block" id="brand-results-block">
+      <div class="row results-header">
+        <h3 id="results-title">Результаты по бренду</h3>
+        <div id="status" class="status"></div>
       </div>
-      <div id="feed-list" class="feed-list"></div>
+      <div id="results"></div>
     </div>
+    <p class="summary brand-cache-line"><span id="cache-info"></span></p>
   </section>
-
-  <section class="card" id="results-card">
-    <div class="row"><h2 id="results-title">Результаты</h2><div id="status" class="status"></div></div>
-    <div id="results"></div>
-  </section>
-
-  <footer class="app-footer">
-    <span id="cache-info"></span>
-  </footer>
 </div>
 <script src="/app.js" type="module"></script>
 </body>

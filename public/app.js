@@ -77,7 +77,6 @@ async function initClients() {
     $('#city-store-search').value = '';
     $('#feed-filter').value = '';
     loadFeeds();
-    updateWarmButton();
   });
 }
 
@@ -182,6 +181,12 @@ async function addPartner() {
 
 function updateClientMeta() {
   $('#feeds-list-url').textContent = state.feedsListUrl || '—';
+  const titleEl = $('#results-title');
+  if (titleEl) {
+    titleEl.textContent = state.clientName
+      ? `Результаты: ${state.clientName} (site_id ${state.siteId})`
+      : 'Результаты по бренду';
+  }
   document.title = `ЭРКАФАРМ — ${state.clientName || state.siteId}`;
 }
 
@@ -200,8 +205,6 @@ async function loadFeeds() {
   updateCityStoreControls();
   renderCityStoreList();
   updateCacheInfo();
-  updateWarmAllCount();
-  updateWarmButton();
 }
 
 function populateCityDropdown() {
@@ -277,7 +280,6 @@ function renderFeedList() {
   }
   list.appendChild(frag);
   updateSelectedCount();
-  updateWarmButton();
 }
 
 function updateSelectedCount() {
@@ -393,7 +395,6 @@ function renderCityStoreList() {
   }
   list.appendChild(frag);
   renderCitySelectionSummary();
-  updateWarmButton();
 }
 
 function renderCitySummary() {
@@ -483,6 +484,7 @@ async function runSearch() {
       `Просканировано ${data.feedsScanned} фидов за ${data.elapsedMs} мс (сеть+кэш), клиент: ${ms} мс. Совпадений: ${data.hitsCount}.${note}`,
     );
     renderResults(data);
+    $('#brand-results-block')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     setStatus('error', String(e.message || e));
   }
@@ -565,6 +567,7 @@ async function runNetworkSearch() {
       `Брендов: ${data.brandsScanned}, фидов: ${data.feedsScanned}, совпадений: ${data.hitsCount}, ${data.elapsedMs} мс (сервер), ${ms} мс (клиент).`,
     );
     renderNetworkResults(data);
+    $('#section-all-brands')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     setNetworkStatus('error', String(e.message || e));
   }
@@ -705,29 +708,6 @@ async function requestCacheRefresh() {
   }
 }
 
-async function warmNetworkAll() {
-  if (!confirm('Прогреть XML всех фидов всех брендов? Это может занять много времени.')) return;
-  setNetworkStatus('loading', 'Прогреваем все фиды всех брендов…');
-  try {
-    const res = await apiFetch('/api/warm-all', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ force: true }),
-      signal: longFetchSignal(7_200_000),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    setNetworkStatus(
-      '',
-      `Прогрето ${data.warmed}/${data.total} за ${data.elapsedMs} мс. Ошибок: ${data.failed}.`,
-    );
-    await loadNetworkSummary();
-    updateCacheInfo();
-  } catch (e) {
-    setNetworkStatus('error', String(e.message || e));
-  }
-}
-
 function renderResults(data) {
   const out = $('#results');
   out.innerHTML = '';
@@ -856,38 +836,8 @@ async function updateCacheInfo() {
   try {
     const res = await apiFetch(`/api/feed-status?${clientQuery()}`);
     const j = await res.json();
-    $('#cache-info').textContent = `site_id ${j.siteId}: в кэше ${j.cachedCount} XML. TTL ~12 ч.`;
+    $('#cache-info').textContent = `Кэш бренда site_id ${j.siteId}: ${j.cachedCount} XML на диске.`;
   } catch {}
-}
-
-function isWarmAllChecked() {
-  const el = $('#warm-all');
-  return Boolean(el && el.checked);
-}
-
-function canWarm() {
-  if (isWarmAllChecked()) return true;
-  if (state.activeTab === 'feeds' && state.selectedFeedIds.size > 0) return true;
-  if (state.activeTab === 'cities' && $('#city').value) return true;
-  if (state.activeTab === 'cities' && state.citySelectedFeedIds.size > 0) return true;
-  return false;
-}
-
-function updateWarmAllCount() {
-  const n = document.getElementById('warm-all-count');
-  if (n) n.textContent = state.feeds.length ? String(state.feeds.length) : '—';
-}
-
-function updateWarmButton() {
-  const btn = $('#warm');
-  if (!btn) return;
-  const ok = canWarm();
-  btn.disabled = !ok;
-  btn.title = ok
-    ? isWarmAllChecked()
-      ? 'Скачать в кэш все XML фидов партнёра (долго, но без парсинга офферов на этом шаге)'
-      : 'Скачать XML в кэш для выбранного города / отмеченных фидов'
-    : 'Выберите город, отметьте фиды или включите «прогреть все фиды» ниже.';
 }
 
 function longFetchSignal(ms) {
@@ -899,47 +849,10 @@ function longFetchSignal(ms) {
   return c.signal;
 }
 
-async function warmCache() {
-  if (!canWarm()) {
-    setStatus(
-      'error',
-      'Сначала выберите город, отметьте фиды или включите галочку «прогреть все фиды».',
-    );
-    return;
-  }
-  const city = $('#city').value;
-  let payload;
-  if (isWarmAllChecked()) {
-    payload = { warmAll: true };
-  } else if (state.activeTab === 'feeds' && state.selectedFeedIds.size) {
-    payload = { feedIds: [...state.selectedFeedIds] };
-  } else if (state.activeTab === 'cities' && state.citySelectedFeedIds.size > 0) {
-    payload = { feedIds: getCityPinnedFeedIds() };
-  } else {
-    payload = { city: city || undefined, kinds: currentKinds() };
-  }
-  setStatus('loading', payload.warmAll ? 'Прогреваем все фиды (долго)…' : 'Прогреваем кэш...');
-  try {
-    const res = await apiFetch('/api/warm', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(withSite(payload)),
-      signal: longFetchSignal(payload.warmAll ? 7_200_000 : 900_000),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || res.statusText || 'Warm failed');
-    setStatus('', `Прогрето ${j.warmed}/${j.total} за ${j.elapsedMs} мс. Ошибок: ${j.failed}.`);
-    updateCacheInfo();
-  } catch (e) {
-    setStatus('error', String(e.message || e));
-  }
-}
-
 $('#network-run')?.addEventListener('click', runNetworkSearch);
 $('#network-query')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') runNetworkSearch();
 });
-$('#network-warm')?.addEventListener('click', warmNetworkAll);
 $('#run').addEventListener('click', runSearch);
 $('#query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') runSearch();
@@ -950,20 +863,17 @@ $('#city').addEventListener('change', () => {
   renderCitySummary();
   updateCityStoreControls();
   renderCityStoreList();
-  updateWarmButton();
 });
 $$('.kind').forEach((el) =>
   el.addEventListener('change', () => {
     renderCitySummary();
     renderCitySelectionSummary();
-    updateWarmButton();
   }),
 );
 $('#city-store-search').addEventListener('input', renderCityStoreList);
 $('#clear-city-stores').addEventListener('click', () => {
   state.citySelectedFeedIds.clear();
   renderCityStoreList();
-  updateWarmButton();
 });
 $('#feed-filter').addEventListener('input', renderFeedList);
 $('#select-visible').addEventListener('click', () => {
@@ -975,7 +885,6 @@ $('#select-visible').addEventListener('click', () => {
 $('#clear-selection').addEventListener('click', () => {
   state.selectedFeedIds.clear();
   renderFeedList();
-  updateWarmButton();
 });
 $$('.tab').forEach((t) =>
   t.addEventListener('click', () => {
@@ -987,12 +896,8 @@ $$('.tab').forEach((t) =>
       renderCitySummary();
       renderCityStoreList();
     }
-    updateWarmButton();
   }),
 );
-$('#warm').addEventListener('click', warmCache);
-const warmAllEl = document.getElementById('warm-all');
-if (warmAllEl) warmAllEl.addEventListener('change', updateWarmButton);
 $('#toggle-add-partner').addEventListener('click', () => toggleAddPartnerPanel());
 $('#add-partner-cancel').addEventListener('click', () => {
   clearAddPartnerForm();

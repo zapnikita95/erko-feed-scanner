@@ -6,6 +6,54 @@ html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFo
 .header-top h1 { margin: 0; font-size: 22px; letter-spacing: 0.04em; }
 .section-title { margin: 0 0 10px; font-size: 17px; }
 .section-hint { margin: 0 0 12px; }
+.header-sub { margin: 0 0 8px; }
+.search-mode-all {
+  border: 2px solid #3b82f6;
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+.search-mode-brand {
+  border: 2px solid #059669;
+  background: linear-gradient(180deg, #f0fdf4 0%, #fff 100%);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.08);
+  margin-top: 28px;
+}
+.mode-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+.mode-badge.mode-all { color: #1d4ed8; background: #dbeafe; }
+.mode-badge.mode-brand { color: #047857; background: #d1fae5; }
+.brand-client-row { margin-top: 4px; }
+.brand-meta { margin-bottom: 16px; }
+.brand-search-block {
+  padding: 14px 0 12px;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 14px;
+}
+.feed-filters-block { margin-bottom: 16px; }
+.filters-heading {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+.brand-results-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 2px dashed #d1d5db;
+}
+.results-header { align-items: center; width: 100%; }
+.results-header h3 { margin: 0; font-size: 16px; }
+.results-block { margin-top: 12px; }
+.brand-cache-line { margin: 12px 0 0; font-size: 12px; color: #6b7280; }
 .network-card { border-color: #bfdbfe; background: linear-gradient(180deg, #f8fbff 0%, #fff 100%); }
 .network-results { margin-top: 12px; }
 details.brand-group {
@@ -74,21 +122,8 @@ details.brand-group .brand-body { padding: 0 12px 12px; }
 .progress-status.error { color: #b91c1c; }
 
 .warm-all-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #334155;
-  cursor: pointer;
+  display: none;
 }
-.warm-all-row input { margin-top: 3px; flex-shrink: 0; }
-.warm-all-text { line-height: 1.45; }
 
 .card {
   background: #fff;
