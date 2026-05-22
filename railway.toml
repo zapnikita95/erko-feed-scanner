@@ -2,6 +2,6 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "DATA_DIR=/data node server.js"
 healthcheckPath = "/api/health"
 restartPolicyType = "ON_FAILURE"

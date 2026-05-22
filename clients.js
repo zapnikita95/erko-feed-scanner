@@ -48,7 +48,9 @@ function readLocalClientRecords() {
 
 function writeLocalClientRecords(clients) {
   ensureDataDirs();
-  fs.writeFileSync(CLIENTS_FILE, JSON.stringify({ clients }, null, 2));
+  const tmp = `${CLIENTS_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ clients }, null, 2));
+  fs.renameSync(tmp, CLIENTS_FILE);
 }
 
 /** Дописывает дефолтных партнёров ЭРКАФАРМ, если их ещё нет в файле. */

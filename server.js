@@ -7,6 +7,14 @@ import crypto from 'crypto';
 import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 import { addLocalClient, defaultSiteId, getClient, listClients } from './clients.js';
+import { CACHE_ROOT, DATA_DIR, ensureDataDirs, getStorageStats } from './config.js';
+import {
+  currentUser,
+  requireUser,
+  requireUserPage,
+  sessionMiddleware,
+  tryLogin,
+} from './auth.js';
 
 function mapSearchResult(r) {
   return {
@@ -35,23 +43,13 @@ async function loadAllNetworkFeeds() {
   }
   return brands;
 }
-import {
-  CACHE_ROOT,
-  DATA_DIR,
-  ensureDataDirs,
-  migrateLegacyCache,
-} from './config.js';
-import {
-  currentUser,
-  requireUser,
-  requireUserPage,
-  sessionMiddleware,
-  tryLogin,
-} from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 ensureDataDirs();
-migrateLegacyCache();
+const storageBoot = getStorageStats();
+console.log(
+  `[erkapharm-feed] storage dataDir=${storageBoot.dataDir} partners=${storageBoot.partners} cacheXml=${storageBoot.cacheFiles} writable=${storageBoot.volumeWritable}`,
+);
 const FEEDS_TTL_MS = 1000 * 60 * 60 * 12;
 const META_TTL_MS = 1000 * 60 * 60 * 24;
 const PORT = Number(process.env.PORT) || 4173;
@@ -312,11 +310,13 @@ app.use(sessionMiddleware());
 const publicDir = path.join(__dirname, 'public');
 
 app.get('/api/health', (req, res) => {
+  const storage = getStorageStats();
   res.json({
     ok: true,
     app: 'erko-feed-scanner',
     canAddClients: true,
     dataDir: DATA_DIR,
+    storage,
     authenticated: Boolean(currentUser(req)),
   });
 });
