@@ -546,30 +546,137 @@ async function loadNetworkSummary() {
   }
 }
 
-function renderNetworkResults(data) {
+let cacheRefreshPollTimer = null;
+let networkSearchAbort = null;
+
+function setNetworkSearchProgress(percent, text, cls = '') {
+  const box = $('#network-search-progress');
+  const bar = $('#network-search-bar');
+  const status = $('#network-search-status');
+  if (!box || !bar || !status) return;
+  box.classList.remove('hidden');
+  bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  status.className = `progress-status ${cls}`;
+  status.textContent = text;
+}
+
+function hideNetworkSearchProgress(delayMs = 4000) {
+  setTimeout(() => {
+    $('#network-search-progress')?.classList.add('hidden');
+  }, delayMs);
+}
+
+function sortFeedResultRows(a, b) {
+  if (a.kind !== b.kind) {
+    const rank = { global: 0, city: 1, store: 2 };
+    return (rank[a.kind] ?? 9) - (rank[b.kind] ?? 9);
+  }
+  return a.title.localeCompare(b.title, 'ru');
+}
+
+function groupNetworkBrandResults(rows) {
+  const global = [];
+  const cityFeeds = [];
+  const storesByRegion = new Map();
+  for (const r of rows) {
+    if (r.kind === 'global') global.push(r);
+    else if (r.kind === 'city') cityFeeds.push(r);
+    else if (r.kind === 'store') {
+      const region = r.city || 'Без региона';
+      if (!storesByRegion.has(region)) storesByRegion.set(region, []);
+      storesByRegion.get(region).push(r);
+    } else {
+      const region = r.city || 'Прочее';
+      if (!storesByRegion.has(region)) storesByRegion.set(region, []);
+      storesByRegion.get(region).push(r);
+    }
+  }
+  global.sort(sortFeedResultRows);
+  cityFeeds.sort(sortFeedResultRows);
+  for (const list of storesByRegion.values()) list.sort(sortFeedResultRows);
+  return { global, cityFeeds, storesByRegion };
+}
+
+function buildBrandNetworkBlock(brand) {
+  const details = document.createElement('details');
+  details.className = 'brand-group';
+  details.open = true;
+
+  const { global, cityFeeds, storesByRegion } = groupNetworkBrandResults(brand.results);
+  const summary = document.createElement('summary');
+  summary.textContent = `${brand.name} (site ${brand.siteId}) — ${brand.hitsCount} совпадений`;
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'brand-body';
+
+  const topRows = [...global, ...cityFeeds];
+  if (topRows.length) {
+    const tier = document.createElement('div');
+    tier.className = 'feed-tier';
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    title.textContent = `Global и региональные фиды (${topRows.length})`;
+    tier.appendChild(title);
+    tier.appendChild(buildHitTable(topRows));
+    body.appendChild(tier);
+  }
+
+  if (storesByRegion.size) {
+    const tier = document.createElement('div');
+    tier.className = 'feed-tier stores-tier';
+    const title = document.createElement('div');
+    title.className = 'group-title';
+    const storeFeeds = [...storesByRegion.values()].reduce((n, arr) => n + arr.length, 0);
+    title.textContent = `Точки по регионам (${storeFeeds})`;
+    tier.appendChild(title);
+
+    const regions = [...storesByRegion.entries()].sort((a, b) => b[1].length - a[1].length);
+    for (const [region, rows] of regions) {
+      const regDetails = document.createElement('details');
+      regDetails.className = 'region-group';
+      const regSummary = document.createElement('summary');
+      regSummary.textContent = `${region} — ${rows.length} точек`;
+      regDetails.appendChild(regSummary);
+      const regBody = document.createElement('div');
+      regBody.className = 'region-body';
+      regBody.appendChild(buildHitTable(rows));
+      regDetails.appendChild(regBody);
+      tier.appendChild(regDetails);
+    }
+    body.appendChild(tier);
+  }
+
+  details.appendChild(body);
+  return details;
+}
+
+function renderNetworkResultsList(brands) {
   const out = $('#network-results');
   if (!out) return;
   out.innerHTML = '';
-  if (!data.brands?.length) {
+  if (!brands?.length) {
     const p = document.createElement('p');
     p.className = 'nohit';
     p.textContent = 'Совпадений не найдено ни у одного бренда.';
     out.appendChild(p);
     return;
   }
-  for (const brand of data.brands) {
-    const details = document.createElement('details');
-    details.className = 'brand-group';
-    details.open = data.brands.length <= 3;
-    const summary = document.createElement('summary');
-    summary.textContent = `${brand.name} (site ${brand.siteId}) — ${brand.hitsCount} совпадений`;
-    details.appendChild(summary);
-    const body = document.createElement('div');
-    body.className = 'brand-body';
-    body.appendChild(buildHitTable(brand.results));
-    details.appendChild(body);
-    out.appendChild(details);
+  for (const brand of brands) {
+    out.appendChild(buildBrandNetworkBlock(brand));
   }
+}
+
+function appendBrandNetworkResult(brand) {
+  const out = $('#network-results');
+  if (!out) return;
+  const empty = out.querySelector('.nohit');
+  if (empty) empty.remove();
+  out.appendChild(buildBrandNetworkBlock(brand));
+}
+
+function renderNetworkResults(data) {
+  renderNetworkResultsList(Array.isArray(data) ? data : data?.brands || []);
 }
 
 async function runNetworkSearch() {
@@ -578,40 +685,84 @@ async function runNetworkSearch() {
     setNetworkStatus('error', 'Введите запрос');
     return;
   }
-  setNetworkStatus('loading', 'Сканируем все бренды и фиды…');
+
+  if (networkSearchAbort) networkSearchAbort.abort();
+  networkSearchAbort = new AbortController();
+  const signal = networkSearchAbort.signal;
+
+  const runBtn = $('#network-run');
+  if (runBtn) runBtn.disabled = true;
+
+  $('#network-results').innerHTML = '';
+  setNetworkStatus('loading', 'Сканируем бренды по очереди…');
+  setNetworkSearchProgress(2, 'Загружаем список брендов…');
+
   const started = performance.now();
+  let feedsScanned = 0;
+  let hitsCount = 0;
+  const brandsOut = [];
+
   try {
-    const res = await apiFetch('/api/search-all', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query, concurrency: 6 }),
-      signal: longFetchSignal(3_600_000),
-    });
-    let data = {};
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
+    if (!state.clients.length) await refreshClients();
+    const clients = [...state.clients];
+    const total = clients.length;
+    if (!total) throw new Error('Нет партнёров для поиска');
+
+    for (let i = 0; i < total; i++) {
+      if (signal.aborted) return;
+      const c = clients[i];
+      const pct = Math.round((i / total) * 100);
+      setNetworkSearchProgress(pct, `${i + 1}/${total}: сканируем ${c.name}…`);
+
+      const res = await apiFetch('/api/search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query, siteId: c.siteId }),
+        signal,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText || `HTTP ${res.status}`);
+
+      feedsScanned += data.feedsScanned || 0;
+      const hits = (data.results || []).filter((r) => r.matches?.length);
+      hitsCount += hits.length;
+
+      if (hits.length) {
+        const brandBlock = {
+          siteId: c.siteId,
+          name: c.name,
+          hitsCount: hits.length,
+          results: hits,
+        };
+        brandsOut.push(brandBlock);
+        appendBrandNetworkResult(brandBlock);
+      }
+
+      setNetworkSearchProgress(
+        Math.round(((i + 1) / total) * 100),
+        `${i + 1}/${total}: ${c.name} — ${hits.length ? `${hits.length} совпадений` : 'нет совпадений'}`,
+      );
     }
-    if (!res.ok) {
-      const msg =
-        res.status === 502
-          ? 'Сервер не успел обработать запрос (502). Попробуйте ID оффера или поиск по одному бренду.'
-          : data.error || res.statusText || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
+
     const ms = Math.round(performance.now() - started);
+    if (!brandsOut.length) {
+      renderNetworkResultsList([]);
+    }
+    setNetworkSearchProgress(100, `Готово: ${total} брендов, ${hitsCount} совпадений`, 'success');
     setNetworkStatus(
       '',
-      `Брендов: ${data.brandsScanned}, фидов: ${data.feedsScanned}, совпадений: ${data.hitsCount}, ${data.elapsedMs} мс (сервер), ${ms} мс (клиент).`,
+      `Брендов: ${total}, фидов: ${feedsScanned}, совпадений: ${hitsCount}, ${ms} мс (клиент). Результаты появлялись по мере сканирования.`,
     );
-    renderNetworkResults(data);
+    hideNetworkSearchProgress();
   } catch (e) {
+    if (signal.aborted || String(e.message || e).includes('abort')) return;
+    setNetworkSearchProgress(0, String(e.message || e), 'error');
     setNetworkStatus('error', String(e.message || e));
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+    networkSearchAbort = null;
   }
 }
-
-let cacheRefreshPollTimer = null;
 
 function setCacheRefreshProgress(percent, text, cls = '') {
   const box = $('#cache-refresh-progress');
@@ -824,6 +975,8 @@ function feedUrlForResult(r) {
 }
 
 function buildHitTable(rows) {
+  const wrap = document.createElement('div');
+  wrap.className = 'hit-results-wrap';
   const table = document.createElement('table');
   table.className = 'hit-results';
   table.innerHTML = `<colgroup>
@@ -860,7 +1013,8 @@ function buildHitTable(rows) {
     }
   }
   table.appendChild(tbody);
-  return table;
+  wrap.appendChild(table);
+  return wrap;
 }
 
 function escapeHtml(s) {

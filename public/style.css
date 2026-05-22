@@ -212,43 +212,88 @@ button.ghost { background: transparent; }
 .status.error { color: #b91c1c; }
 
 #results h2 { margin: 0; font-size: 18px; }
-#results table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-#results table.hit-results {
+.hit-results-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+#results table,
+.network-results table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 0; }
+table.hit-results {
   table-layout: fixed;
 }
-#results table.hit-results col.col-feed { width: 28%; }
-#results table.hit-results col.col-type { width: 7%; }
-#results table.hit-results col.col-id { width: 10%; }
-#results table.hit-results col.col-price { width: 12%; }
-#results table.hit-results col.col-stock { width: 8%; }
-#results table.hit-results col.col-url { width: 35%; }
-#results th, #results td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef0f3; vertical-align: top; }
-#results table.hit-results td:first-child,
-#results table.hit-results th:first-child {
+table.hit-results col.col-feed { width: 28%; }
+table.hit-results col.col-type { width: 7%; }
+table.hit-results col.col-id { width: 10%; }
+table.hit-results col.col-price { width: 12%; }
+table.hit-results col.col-stock { width: 8%; }
+table.hit-results col.col-url { width: 35%; }
+#results th, #results td,
+.network-results th, .network-results td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef0f3; vertical-align: top;
+}
+table.hit-results td:first-child,
+table.hit-results th:first-child {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-#results table.hit-results td:last-child,
-#results table.hit-results th:last-child {
+table.hit-results td:last-child,
+table.hit-results th:last-child {
   min-width: 0;
 }
-#results table.hit-results .url {
+table.hit-results .url {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 #results th { color: #555; font-weight: 600; font-size: 12px; }
-#results tr.hit { background: #f0fdf4; }
+.network-results th { color: #555; font-weight: 600; font-size: 12px; }
+#results tr.hit,
+.network-results tr.hit { background: #f0fdf4; }
 #results .url,
-#results .feed-url { color: #2563eb; text-decoration: none; }
+#results .feed-url,
+.network-results .url,
+.network-results .feed-url { color: #2563eb; text-decoration: none; }
 #results .url:hover,
-#results .feed-url:hover { text-decoration: underline; }
+#results .feed-url:hover,
+.network-results .url:hover,
+.network-results .feed-url:hover { text-decoration: underline; }
 #results .feed-link { margin-top: 4px; font-size: 12px; }
-#results .feed-cell .ext { display: block; margin-top: 2px; }
-#results .nohit { color: #888; }
-#results .price { white-space: nowrap; }
-#results .oldprice { color: #9ca3af; text-decoration: line-through; margin-left: 6px; font-size: 12px; }
-#results .group-title { padding-top: 14px; font-size: 12px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.04em; }
+.network-results .feed-link { margin-top: 4px; font-size: 12px; }
+#results .feed-cell .ext,
+.network-results .feed-cell .ext { display: block; margin-top: 2px; }
+#results .nohit,
+.network-results .nohit { color: #888; }
+#results .price,
+.network-results .price { white-space: nowrap; }
+#results .oldprice,
+.network-results .oldprice { color: #9ca3af; text-decoration: line-through; margin-left: 6px; font-size: 12px; }
+#results .group-title,
+.network-results .group-title {
+  padding-top: 14px; font-size: 12px; text-transform: uppercase;
+  color: #6b7280; letter-spacing: 0.04em;
+}
+.feed-tier { margin-bottom: 14px; }
+.feed-tier.stores-tier { margin-top: 8px; }
+details.region-group {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin: 8px 0;
+  background: #fafafa;
+  overflow: hidden;
+}
+details.region-group > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  list-style: none;
+  background: #f3f4f6;
+}
+details.region-group > summary::-webkit-details-marker { display: none; }
+details.region-group > summary::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform 0.15s;
+}
+details.region-group[open] > summary::before { transform: rotate(90deg); }
+details.region-group .region-body { padding: 0 8px 10px; }
 
 .app-footer { color: #888; font-size: 12px; padding: 8px 0 24px; text-align: center; }

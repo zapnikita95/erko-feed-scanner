@@ -595,9 +595,10 @@ app.post('/api/search', async (req, res) => {
       feeds = feeds.filter(f => kinds.includes(f.kind));
     }
 
-    const allFeeds = feeds;
+    const useLight = feeds.length >= 20;
+    const searchConcurrency = useLight ? 6 : 12;
     const started = Date.now();
-    let results = await runSearch(siteId, feeds, q);
+    let results = await runSearch(siteId, feeds, q, { concurrency: searchConcurrency, light: useLight });
     let globalAutoScanned = false;
     let note;
     const hitsBefore = results.filter(r => r.matches.length);
@@ -605,7 +606,7 @@ app.post('/api/search', async (req, res) => {
       const globalFeed = enrichFeeds(meta, client).find(f => f.kind === 'global');
       const hadGlobal = feeds.some(f => f.kind === 'global');
       if (globalFeed && !hadGlobal) {
-        const globalResult = await searchInFeed(siteId, globalFeed, q);
+        const globalResult = await searchInFeed(siteId, globalFeed, q, { light: useLight });
         globalAutoScanned = true;
         if (globalResult.matches.length) {
           results = [...results, globalResult];
