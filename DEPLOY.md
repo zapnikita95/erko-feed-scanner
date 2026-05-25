@@ -21,7 +21,7 @@ git push -u origin main
    - `SESSION_SECRET` — случайная строка 32+ символов
    - `DATA_DIR` = `/data` (дублирует startCommand; без этого на Railway всё равно подхватится `/data`, если есть Volume)
    - `NODE_ENV` = `production`
-   - `ALLOWED_EMAIL_SUFFIXES` = `@diginetica.com,@anyquery.ru,@tbank.ru` (при необходимости)
+   - `ERKO_ACCESS_SITE_IDS` = `6390,5335,292,8049` (по умолчанию; вход — любой email с доступом к одному из site в Dashboard)
 4. После деплоя открыть URL → **Вход** (логин/пароль Dashboard + TOTP). После успешного входа кэш фидов **обновляется автоматически** (сначала Озерки, затем остальные бренды). Вручную — кнопка **«Обновить кэш»** в шапке.
 
 ## Что хранится на Volume

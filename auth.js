@@ -1,6 +1,10 @@
 import session from 'express-session';
 import { createRequire } from 'module';
-import { dashboardLogin, cleanTotp } from './lib/dashboard_auth.js';
+import {
+  cleanTotp,
+  dashboardLoginSession,
+  hasAnySiteAccess,
+} from './lib/dashboard_auth.js';
 import { SESSIONS_DIR, ensureDataDirs } from './config.js';
 
 const require = createRequire(import.meta.url);
@@ -12,18 +16,15 @@ const SESSION_SECRET =
 /** 7 суток — сессия переживает редеплой, если SESSION_SECRET стабилен и Volume на /data. */
 const SESSION_MAX_AGE_MS = Number(process.env.SESSION_MAX_AGE_MS) || 1000 * 60 * 60 * 24 * 7;
 
-const ALLOWED_SUFFIXES = (process.env.ALLOWED_EMAIL_SUFFIXES || '@diginetica.com,@anyquery.ru,@tbank.ru')
+/** Site ID сети ЭРКАФАРМ: вход разрешён, если в Dashboard есть доступ хотя бы к одному. */
+export const ERKO_ACCESS_SITE_IDS = (
+  process.env.ERKO_ACCESS_SITE_IDS || '6390,5335,292,8049'
+)
   .split(',')
-  .map((s) => s.trim().toLowerCase())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 let sessionHandler = null;
-
-export function emailAllowed(username) {
-  const u = String(username || '').trim().toLowerCase();
-  if (!u.includes('@')) return false;
-  return ALLOWED_SUFFIXES.some((s) => u.endsWith(s));
-}
 
 export function sessionMiddleware() {
   if (sessionHandler) return sessionHandler;
@@ -66,20 +67,37 @@ export function requireUserPage(req, res, next) {
 
 export async function tryLogin(username, password, totp) {
   const u = String(username || '').trim();
-  if (!emailAllowed(u)) {
-    return { ok: false, status: 403, message: 'Доступ только для корпоративных учётных записей.' };
+  if (!u.includes('@')) {
+    return { ok: false, status: 400, message: 'Укажите email из личного кабинета Dashboard.' };
   }
   const code = cleanTotp(totp);
   if (code.length !== 6) {
     return { ok: false, status: 401, message: 'Введите 6-значный код из приложения-аутентификатора.' };
   }
+  let cookieHeader;
   try {
-    const ok = await dashboardLogin(u, password, code);
-    if (!ok) {
+    cookieHeader = await dashboardLoginSession(u, password, code);
+    if (!cookieHeader) {
       return { ok: false, status: 401, message: 'Неверный логин, пароль или код TOTP.' };
     }
   } catch (e) {
     return { ok: false, status: 502, message: String(e.message || e) };
   }
-  return { ok: true, user: u.toLowerCase() };
+
+  let matchedSiteId = null;
+  try {
+    matchedSiteId = await hasAnySiteAccess(cookieHeader, ERKO_ACCESS_SITE_IDS);
+  } catch (e) {
+    return { ok: false, status: 502, message: String(e.message || e) };
+  }
+  if (!matchedSiteId) {
+    return {
+      ok: false,
+      status: 403,
+      message:
+        'Нет доступа к кабинетам Эркафарм (Озерки / Столетов / Самсон / Супераптека) в Dashboard. Попросите коллег выдать доступ к site 6390.',
+    };
+  }
+
+  return { ok: true, user: u.toLowerCase(), dashboardSiteId: matchedSiteId };
 }
